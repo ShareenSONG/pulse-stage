@@ -1,0 +1,381 @@
+{
+  "id": "neon-bloom-32-Z1-reverse",
+  "version": "0.1.0",
+  "bpm": 120,
+  "duration": 32,
+  "mode": "Z1",
+  "notes": [
+    {
+      "id": "n0",
+      "time": 2,
+      "kind": "slash",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left",
+      "dx": 0,
+      "dy": -1
+    },
+    {
+      "id": "n1",
+      "time": 2.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n2",
+      "time": 3,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.32,
+      "hand": "left"
+    },
+    {
+      "id": "n3",
+      "time": 3.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n4",
+      "time": 4,
+      "kind": "double",
+      "x": 0.32,
+      "y": 0.48
+    },
+    {
+      "id": "n5",
+      "time": 4.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n6",
+      "time": 5,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n7",
+      "time": 5.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n8",
+      "time": 6,
+      "kind": "sway",
+      "x": 0.32,
+      "y": 0.32
+    },
+    {
+      "id": "n9",
+      "time": 6.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n10",
+      "time": 7,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n11",
+      "time": 7.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right"
+    },
+    {
+      "id": "z0",
+      "time": 10,
+      "kind": "step",
+      "x": 0.5,
+      "y": 0.5,
+      "direction": "away_from_camera"
+    },
+    {
+      "id": "n12",
+      "time": 12,
+      "kind": "sway",
+      "x": 0.32,
+      "y": 0.32
+    },
+    {
+      "id": "n13",
+      "time": 12.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n14",
+      "time": 13,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n15",
+      "time": 13.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right"
+    },
+    {
+      "id": "n16",
+      "time": 14,
+      "kind": "slash",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left",
+      "dx": 0,
+      "dy": -1
+    },
+    {
+      "id": "n17",
+      "time": 14.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n18",
+      "time": 15,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.32,
+      "hand": "left"
+    },
+    {
+      "id": "n19",
+      "time": 15.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n20",
+      "time": 16,
+      "kind": "double",
+      "x": 0.32,
+      "y": 0.48
+    },
+    {
+      "id": "n21",
+      "time": 16.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n22",
+      "time": 17,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n23",
+      "time": 17.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n24",
+      "time": 18,
+      "kind": "sway",
+      "x": 0.32,
+      "y": 0.32
+    },
+    {
+      "id": "n25",
+      "time": 18.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n26",
+      "time": 19,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n27",
+      "time": 19.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right"
+    },
+    {
+      "id": "z1",
+      "time": 22,
+      "kind": "step",
+      "x": 0.5,
+      "y": 0.5,
+      "direction": "toward_camera"
+    },
+    {
+      "id": "n28",
+      "time": 24,
+      "kind": "sway",
+      "x": 0.32,
+      "y": 0.32
+    },
+    {
+      "id": "n29",
+      "time": 24.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n30",
+      "time": 25,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n31",
+      "time": 25.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right"
+    },
+    {
+      "id": "n32",
+      "time": 26,
+      "kind": "slash",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left",
+      "dx": 0,
+      "dy": -1
+    },
+    {
+      "id": "n33",
+      "time": 26.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n34",
+      "time": 27,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.32,
+      "hand": "left"
+    },
+    {
+      "id": "n35",
+      "time": 27.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n36",
+      "time": 28,
+      "kind": "double",
+      "x": 0.32,
+      "y": 0.48
+    },
+    {
+      "id": "n37",
+      "time": 28.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.64,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    },
+    {
+      "id": "n38",
+      "time": 29,
+      "kind": "catch",
+      "x": 0.32,
+      "y": 0.48,
+      "hand": "left"
+    },
+    {
+      "id": "n39",
+      "time": 29.5,
+      "kind": "catch",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right"
+    },
+    {
+      "id": "n40",
+      "time": 30,
+      "kind": "sway",
+      "x": 0.32,
+      "y": 0.32
+    },
+    {
+      "id": "n41",
+      "time": 30.5,
+      "kind": "slash",
+      "x": 0.68,
+      "y": 0.48,
+      "hand": "right",
+      "dx": 0,
+      "dy": 1
+    }
+  ]
+}

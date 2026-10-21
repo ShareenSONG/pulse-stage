@@ -1,0 +1,27 @@
+{
+  "name": "pulse-stage",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5188 --strictPort",
+    "test": "tsx --test tests/*.test.ts",
+    "assets": "node scripts/prepare-assets.mjs && node scripts/prepare-xy-chart.mjs && node scripts/prepare-body-chart.mjs && node scripts/prepare-palm-chart.mjs && node scripts/prepare-slider-chart.mjs",
+    "predev": "node scripts/prepare-worker.mjs",
+    "prebuild": "node scripts/prepare-worker.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.32",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "esbuild": "0.25.11",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "7.1.12"
+  }
+}

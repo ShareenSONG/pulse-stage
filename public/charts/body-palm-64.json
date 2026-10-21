@@ -1,0 +1,710 @@
+{
+  "id": "neon-bloom-palm",
+  "version": "1.5.0",
+  "audioVersion": "neon-bloom-64-v1",
+  "playStyle": "body-pilot",
+  "ruleVersion": "body-palm-1.5.0",
+  "mapVersion": "shoulders-1.4.0",
+  "duration": 64,
+  "bpm": 120,
+  "offset": 0,
+  "leadTime": 2.8,
+  "events": [
+    {
+      "id": "body-1",
+      "kind": "body",
+      "beat": 4,
+      "time": 2,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-0"
+    },
+    {
+      "id": "body-2",
+      "kind": "body",
+      "beat": 8,
+      "time": 4,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-1"
+    },
+    {
+      "id": "body-3",
+      "kind": "body",
+      "beat": 12,
+      "time": 6,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-2"
+    },
+    {
+      "id": "body-4",
+      "kind": "body",
+      "beat": 13,
+      "time": 6.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-2"
+    },
+    {
+      "id": "body-5",
+      "kind": "body",
+      "beat": 16,
+      "time": 8,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-3"
+    },
+    {
+      "id": "body-6",
+      "kind": "body",
+      "beat": 17,
+      "time": 8.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-3"
+    },
+    {
+      "id": "body-7",
+      "kind": "body",
+      "beat": 20,
+      "time": 10,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-4"
+    },
+    {
+      "id": "body-8",
+      "kind": "body",
+      "beat": 21,
+      "time": 10.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-4"
+    },
+    {
+      "id": "body-9",
+      "kind": "body",
+      "beat": 24,
+      "time": 12,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-5"
+    },
+    {
+      "id": "body-10",
+      "kind": "body",
+      "beat": 25,
+      "time": 12.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-5"
+    },
+    {
+      "id": "body-11",
+      "kind": "body",
+      "beat": 28,
+      "time": 14,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-6"
+    },
+    {
+      "id": "palm-1",
+      "kind": "palm",
+      "hand": "left",
+      "hold": 0.45,
+      "beat": 28,
+      "time": 14,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-1"
+    },
+    {
+      "id": "body-12",
+      "kind": "body",
+      "beat": 29,
+      "time": 14.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-6"
+    },
+    {
+      "id": "body-13",
+      "kind": "body",
+      "beat": 32,
+      "time": 16,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-7"
+    },
+    {
+      "id": "body-14",
+      "kind": "body",
+      "beat": 33,
+      "time": 16.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-7"
+    },
+    {
+      "id": "body-15",
+      "kind": "body",
+      "beat": 36,
+      "time": 18,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-8"
+    },
+    {
+      "id": "body-16",
+      "kind": "body",
+      "beat": 37,
+      "time": 18.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-8"
+    },
+    {
+      "id": "body-17",
+      "kind": "body",
+      "beat": 40,
+      "time": 20,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-9"
+    },
+    {
+      "id": "body-18",
+      "kind": "body",
+      "beat": 41,
+      "time": 20.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-9"
+    },
+    {
+      "id": "body-19",
+      "kind": "body",
+      "beat": 44,
+      "time": 22,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-10"
+    },
+    {
+      "id": "palm-2",
+      "kind": "palm",
+      "hand": "right",
+      "hold": 0.45,
+      "beat": 44,
+      "time": 22,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-2"
+    },
+    {
+      "id": "body-20",
+      "kind": "body",
+      "beat": 45,
+      "time": 22.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-10"
+    },
+    {
+      "id": "body-21",
+      "kind": "body",
+      "beat": 48,
+      "time": 24,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-11"
+    },
+    {
+      "id": "body-22",
+      "kind": "body",
+      "beat": 49,
+      "time": 24.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-11"
+    },
+    {
+      "id": "body-23",
+      "kind": "body",
+      "beat": 52,
+      "time": 26,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-12"
+    },
+    {
+      "id": "body-24",
+      "kind": "body",
+      "beat": 53,
+      "time": 26.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-12"
+    },
+    {
+      "id": "body-25",
+      "kind": "body",
+      "beat": 56,
+      "time": 28,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-13"
+    },
+    {
+      "id": "body-26",
+      "kind": "body",
+      "beat": 57,
+      "time": 28.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-13"
+    },
+    {
+      "id": "body-27",
+      "kind": "body",
+      "beat": 60,
+      "time": 30,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-14"
+    },
+    {
+      "id": "palm-3",
+      "kind": "palm",
+      "hand": "left",
+      "hold": 0.45,
+      "beat": 60,
+      "time": 30,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-3"
+    },
+    {
+      "id": "body-28",
+      "kind": "body",
+      "beat": 61,
+      "time": 30.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-14"
+    },
+    {
+      "id": "body-29",
+      "kind": "body",
+      "beat": 64,
+      "time": 32,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-15"
+    },
+    {
+      "id": "body-30",
+      "kind": "body",
+      "beat": 65,
+      "time": 32.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-15"
+    },
+    {
+      "id": "body-31",
+      "kind": "body",
+      "beat": 68,
+      "time": 34,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-16"
+    },
+    {
+      "id": "body-32",
+      "kind": "body",
+      "beat": 69,
+      "time": 34.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-16"
+    },
+    {
+      "id": "body-33",
+      "kind": "body",
+      "beat": 72,
+      "time": 36,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-17"
+    },
+    {
+      "id": "body-34",
+      "kind": "body",
+      "beat": 73,
+      "time": 36.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-17"
+    },
+    {
+      "id": "body-35",
+      "kind": "body",
+      "beat": 76,
+      "time": 38,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-18"
+    },
+    {
+      "id": "palm-4",
+      "kind": "palm",
+      "hand": "right",
+      "hold": 0.45,
+      "beat": 76,
+      "time": 38,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-4"
+    },
+    {
+      "id": "body-36",
+      "kind": "body",
+      "beat": 77,
+      "time": 38.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-18"
+    },
+    {
+      "id": "body-37",
+      "kind": "body",
+      "beat": 80,
+      "time": 40,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-19"
+    },
+    {
+      "id": "body-38",
+      "kind": "body",
+      "beat": 81,
+      "time": 40.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-19"
+    },
+    {
+      "id": "body-39",
+      "kind": "body",
+      "beat": 84,
+      "time": 42,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-20"
+    },
+    {
+      "id": "body-40",
+      "kind": "body",
+      "beat": 85,
+      "time": 42.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-20"
+    },
+    {
+      "id": "body-41",
+      "kind": "body",
+      "beat": 88,
+      "time": 44,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-21"
+    },
+    {
+      "id": "body-42",
+      "kind": "body",
+      "beat": 89,
+      "time": 44.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-21"
+    },
+    {
+      "id": "body-43",
+      "kind": "body",
+      "beat": 92,
+      "time": 46,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-22"
+    },
+    {
+      "id": "palm-5",
+      "kind": "palm",
+      "hand": "left",
+      "hold": 0.45,
+      "beat": 92,
+      "time": 46,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-5"
+    },
+    {
+      "id": "body-44",
+      "kind": "body",
+      "beat": 93,
+      "time": 46.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-22"
+    },
+    {
+      "id": "body-45",
+      "kind": "body",
+      "beat": 96,
+      "time": 48,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-23"
+    },
+    {
+      "id": "body-46",
+      "kind": "body",
+      "beat": 97,
+      "time": 48.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-23"
+    },
+    {
+      "id": "body-47",
+      "kind": "body",
+      "beat": 100,
+      "time": 50,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-24"
+    },
+    {
+      "id": "body-48",
+      "kind": "body",
+      "beat": 101,
+      "time": 50.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-24"
+    },
+    {
+      "id": "body-49",
+      "kind": "body",
+      "beat": 104,
+      "time": 52,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-25"
+    },
+    {
+      "id": "body-50",
+      "kind": "body",
+      "beat": 105,
+      "time": 52.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-25"
+    },
+    {
+      "id": "body-51",
+      "kind": "body",
+      "beat": 108,
+      "time": 54,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-26"
+    },
+    {
+      "id": "palm-6",
+      "kind": "palm",
+      "hand": "right",
+      "hold": 0.45,
+      "beat": 108,
+      "time": 54,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-6"
+    },
+    {
+      "id": "body-52",
+      "kind": "body",
+      "beat": 109,
+      "time": 54.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-26"
+    },
+    {
+      "id": "body-53",
+      "kind": "body",
+      "beat": 112,
+      "time": 56,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-27"
+    },
+    {
+      "id": "body-54",
+      "kind": "body",
+      "beat": 113,
+      "time": 56.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-27"
+    },
+    {
+      "id": "body-55",
+      "kind": "body",
+      "beat": 116,
+      "time": 58,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-28"
+    },
+    {
+      "id": "body-56",
+      "kind": "body",
+      "beat": 117,
+      "time": 58.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-28"
+    },
+    {
+      "id": "body-57",
+      "kind": "body",
+      "beat": 120,
+      "time": 60,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-29"
+    },
+    {
+      "id": "palm-7",
+      "kind": "palm",
+      "hand": "left",
+      "hold": 0.45,
+      "beat": 120,
+      "time": 60,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-7"
+    },
+    {
+      "id": "body-58",
+      "kind": "body",
+      "beat": 121,
+      "time": 60.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-29"
+    },
+    {
+      "id": "body-59",
+      "kind": "body",
+      "beat": 124,
+      "time": 62,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-30"
+    },
+    {
+      "id": "palm-8",
+      "kind": "palm",
+      "hand": "right",
+      "hold": 0.45,
+      "beat": 124,
+      "time": 62,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "palm-8"
+    },
+    {
+      "id": "body-60",
+      "kind": "body",
+      "beat": 125,
+      "time": 62.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-30"
+    }
+  ]
+}

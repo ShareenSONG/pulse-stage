@@ -1,0 +1,874 @@
+import "./style.css";
+import { Camera } from "./camera";
+import { Music } from "./audio";
+import { Stage } from "./stage";
+import { POSE_MODEL } from "./model";
+import { CalibrationCapture, jointStatus } from "./motion";
+import { XYTracker, inspectUpper, calibrateUpper } from "./xy-motion";
+import { XYGame, XY_RULE } from "./xy-game";
+import { validateChart } from "./game";
+import type {
+  Action,
+  Calibration,
+  Chart,
+  Input,
+  MotionFrame,
+  Point,
+} from "./types";
+const $ = <T extends HTMLElement = HTMLElement>(s: string) =>
+  document.querySelector<T>(s)!;
+const safe = <T>(key: string, fallback: T): T => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+const store = (key: string, value: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    toast("本地保存失败，可以导出本局报告");
+  }
+};
+const escape = (s: string) =>
+  s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+const VERSION = "0.2.0";
+$("#app").innerHTML =
+  `<div id="stage"></div><div class="vignette"></div><header class="topbar"><button class="brand" data-go="home" aria-label="返回准备"><span class="brand-mark">P</span><span>PULSE<span class="brand-light">STAGE</span><small>星 跃 律 动</small></span></button><div class="nav"><button data-go="home" class="nav-item">准备舞台</button><button data-go="lab" class="nav-item">输入检查 <span class="tag">XY</span></button></div><div class="device"><i id="camera-dot"></i><span id="camera-status">摄像头未开启</span><button id="camera-power" class="icon-btn" title="关闭摄像头" hidden>⏻</button></div></header><main id="content"></main><div id="toast" role="status"></div><div id="hand-cursor" aria-hidden="true"></div><footer class="footer"><span>LOCAL DEMO <b>v${VERSION}</b></span><span>上半身 XY · 本地识别 · 无手柄</span><span id="fps">MAC / WEBGL</span></footer>`;
+const camera = new Camera(),
+  music = new Music(),
+  stage = new Stage($("#stage")),
+  tracker = new XYTracker(),
+  capture = new CalibrationCapture();
+let view = "home",
+  input: Input = "camera",
+  frame: MotionFrame | null = null,
+  calibration: Calibration | null = safe("pulse-xy-calibration", null),
+  verified = false;
+let game: XYGame | null = null,
+  playing = false,
+  paused = false,
+  counting = false,
+  finishing = false,
+  loading = false,
+  low = false,
+  preview = true;
+let lastPose = 0,
+  lowSince = 0,
+  aboveSince = 0,
+  generation = 0,
+  mainHand: "left" | "right" = safe("pulse-xy-main-hand", "right");
+let dwellState: { el: HTMLElement | null; since: number; armed: boolean } = {
+  el: null,
+  since: 0,
+  armed: false,
+};
+let missingSince = { left: 0, right: 0, shoulders: 0 };
+let guide: null | {
+  step: number;
+  start: number;
+  samples: Point[];
+  held: number;
+  counts: { left: number; right: number };
+} = null;
+let stats: {
+  processing: number[];
+  fps: number[];
+  interruptions: string[];
+  judgements: unknown[];
+} = { processing: [], fps: [], interruptions: [], judgements: [] };
+tracker.reset(calibration);
+function toast(message: string) {
+  $("#toast").textContent = message;
+  $("#toast").classList.add("show");
+  setTimeout(() => $("#toast").classList.remove("show"), 4000);
+}
+function resetMenu() {
+  dwellState = { el: null, since: 0, armed: false };
+  $("#hand-cursor").classList.remove("visible");
+}
+function bodyReady() {
+  return (
+    camera.active &&
+    verified &&
+    !!frame &&
+    performance.now() - frame.time < 250 &&
+    inspectUpper(frame.points).ready
+  );
+}
+function render() {
+  resetMenu();
+  stage.active = view === "play";
+  $("#content").className = `view-${view}`;
+  $(".topbar").classList.toggle("in-game", view === "play");
+  $(".footer").hidden = view === "play";
+  document
+    .querySelectorAll<HTMLElement>("[data-go]")
+    .forEach((e) => e.classList.toggle("active", e.dataset.go === view));
+  if (view === "home")
+    $("#content").innerHTML =
+      `<section class="hero"><div class="eyebrow"><span class="live-line"></span> ONE SONG. TWO HANDS. YOUR LIGHT.</div><h1>挥动双手，<br>击中<span class="gradient-text">每一拍。</span></h1><p class="hero-copy">音符到面，划过光点。<br>用上半身的真实动作，奏响一分钟的未来舞台。</p><div class="hero-actions"><button class="primary" id="enable">${loading ? "正在开启…" : camera.active ? "重新定位双手" : "开启摄像头"} <span>↗</span></button><button class="text-btn" id="tutorial">先看玩法 <span>→</span></button></div><div class="privacy-line"><span class="tiny-diamond"></span> 只在这台 Mac 处理画面，不上传、不录制</div></section><aside class="orbit-label"><span>01 / XY MOTION DEMO</span><h2>NEON<br>BLOOM<span>光 绽</span></h2><div class="orbital-rule"></div><p>原创电子节奏 / 120 BPM</p><div class="axis-labels"><b>X</b><span>左右挥击</span><b>Y</b><span>高低变化</span></div></aside><section class="launch-panel xy-launch"><div class="track-info"><div class="album"><span>NB</span><i></i></div><div><span class="section-label">ONE-MINUTE EXPERIENCE</span><h3>Neon Bloom <span>光绽</span></h3><p>64 秒 · 80 个节奏单位 · 双手 XY 挥击</p></div><span class="xy-badge">上半身即可玩</span></div><div class="xy-rule-strip"><span><b class="gold">L</b> 左手暖金</span><span><b class="cyan">R</b> 右手青蓝</span><span>音符到达目标面时挥过 · 方向自由</span></div><div class="launch-bottom"><div class="input-switch"><button data-input="camera" class="${input === "camera" ? "on" : ""}">摄像头游玩</button><button data-input="keyboard" class="${input === "keyboard" ? "on" : ""}">键盘试玩</button></div><span id="readiness" class="readiness">${input === "keyboard" ? "模拟输入 · J 左 / K 右" : bodyReady() ? "上半身已就绪" : camera.active ? "完成上半身定位即可开始" : "先开启摄像头"}</span><label class="toggle"><input id="low" type="checkbox" ${low ? "checked" : ""}>低特效</label><button id="play" class="primary play-btn">${input === "camera" && !verified ? "准备并开始" : "进入舞台"} <span>▷</span></button></div>${input === "keyboard" ? '<div class="sim-warning">键盘只测试节奏与流程：J 左手 / K 右手，双手音符需同时按。不会自动演奏，不验证真实识别。</div>' : ""}</section>`;
+  if (view === "lab")
+    $("#content").innerHTML =
+      `<section class="lab-header"><div><div class="eyebrow">UPPER BODY / XY INPUT</div><h1>让动作与光<span>对齐。</span></h1><p>只检查双肩、双肘、双腕。髋部不影响开局。</p></div><div class="lab-actions"><button id="export" class="secondary">导出报告 ↗</button><button id="enable" class="primary">${camera.active ? "重新定位" : "开启摄像头"} ↗</button></div></section><div class="lab-grid"><div class="camera-card"><div class="card-top"><span><i class="status-dot"></i> LIVE INPUT</span><label class="toggle"><input id="preview" type="checkbox" ${preview ? "checked" : ""}>显示画面</label></div><div id="video-slot"><canvas id="skeleton"></canvas>${camera.active ? "" : '<div class="camera-empty"><span class="scan-icon">⌗</span><h3>把双手带进画面</h3><p>固定 Mac，正面站立；不用露出髋部与腿。</p></div>'}</div><div id="joint-diagnostics" class="joint-diagnostics"></div></div><div class="signal-card xy-input-card"><div class="eyebrow">REAL MOTION / LOCAL MODEL</div><h2>双手动作，清楚可见。</h2><p class="model-info">${POSE_MODEL.name}<br>${POSE_MODEL.sdk} · CPU/WASM · 33点</p><div class="xy-map" id="xy-map"><span>上半身舒适范围</span><i class="map-left">L</i><i class="map-right">R</i></div><p id="signal-reason">等待可靠输入</p><div class="signal-stats"><div><small>姿态输出</small><strong id="pose-fps">—</strong></div><div><small>推理耗时</small><strong id="inference">—</strong></div><div><small>映射状态</small><strong id="map-state">待定位</strong></div></div><label class="toggle main-hand">菜单主控手 <select id="main-hand"><option value="right" ${mainHand === "right" ? "selected" : ""}>右手</option><option value="left" ${mainHand === "left" ? "selected" : ""}>左手</option></select></label><p class="fineprint">没有新可靠姿态时不会累积按钮停留。关闭预览仍继续识别。诊断不等于真人精度验收。</p><button class="primary" data-go="home">返回准备 →</button></div></div>`;
+  if (view === "play")
+    $("#content").innerHTML =
+      `<div class="game-top"><div><span class="section-label">NEON BLOOM / XY RHYTHM</span><h3>光绽 <span>${input === "camera" ? "摄像头 · 上半身" : "键盘模拟 · J / K"}</span></h3></div><div class="game-score"><span>SCORE</span><strong id="score">0000000</strong></div><button id="pause" class="secondary">Ⅱ 暂停</button></div><div class="combo"><strong id="combo">0</strong><span>COMBO</span></div><div id="center-message" class="center-message"></div>${input === "camera" ? `<div class="stage-preview"><div id="video-slot"><canvas id="skeleton"></canvas></div><button id="preview-toggle" class="text-btn">${preview ? "隐藏预览" : "显示预览"}</button></div>` : ""}<div class="game-bottom"><div class="hand-key left"><b>L 左手</b><span>${input === "keyboard" ? "按 J 到拍挥击" : "暖金 · 划过目标"}</span></div><div class="song-progress"><div><span id="time">0:00</span><span>1:04</span></div><i><b id="progress"></b></i><p id="tracking-status">让音乐带动你的双手</p></div><div class="hand-key right"><b>R 右手</b><span>${input === "keyboard" ? "按 K 到拍挥击" : "青蓝 · 划过目标"}</span></div></div><div id="pause-overlay" hidden></div>`;
+  if (view === "results" && game) {
+    const accuracy = game.accuracy,
+      rating =
+        accuracy >= 95
+          ? "S"
+          : accuracy >= 85
+            ? "A"
+            : accuracy >= 70
+              ? "B"
+              : accuracy >= 50
+                ? "C"
+                : "D";
+    const best =
+      safe<Record<string, number>>("pulse-xy-bests", {})[bestKey()] ?? 0;
+    const full =
+      !game.assisted &&
+      game.counts.Perfect + game.counts.Great === game.chart.notes.length;
+    $("#content").innerHTML =
+      `<section class="results"><div class="eyebrow">SONG COMPLETE / 64 SECONDS OF LIGHT</div><h1>这一首，<span>为你闪耀。</span></h1><div class="result-card"><div class="rating">${rating}<small>${input === "keyboard" ? "键盘模拟" : game.assisted ? "辅助练习" : "正式完成"}</small></div><div class="result-score"><span>NEON BLOOM · XY · ${full ? "FULL COMBO" : "64S"}</span><strong>${game.score.toLocaleString()}</strong><p>${input === "keyboard" ? "模拟成绩不写入摄像头纪录" : game.assisted ? "本局为辅助练习，不覆盖正式纪录" : `个人最佳 ${best.toLocaleString()}`}</p></div><div class="result-metrics"><div><strong>${accuracy.toFixed(1)}<small>%</small></strong><span>加权准确率</span></div><div><strong>${game.maxCombo}</strong><span>最高连击</span></div></div></div><div class="judgement-grid">${(["Perfect", "Great", "Good", "Miss", "Protected"] as const).map((k) => `<div><span>${k === "Protected" ? "技术保护" : k}</span><strong>${game!.counts[k]}</strong></div>`).join("")}</div><p class="result-note">${input === "keyboard" ? "本局只验证节奏、判分与完成流程，不能作为摄像头精度证据。" : stats.interruptions.length ? "输入偏慢、暂停或识别保护的记录可从报告查看。" : "真实识别准确率仍需独立真人验证；大幅挥动不额外加分。"}</p><div class="result-actions"><button class="secondary" data-go="home">返回准备</button><button class="secondary" id="export">导出本局 ↗</button><button class="primary" id="play">再跳一次 ▷</button></div></section>`;
+  }
+  bind();
+  mountPreview();
+  device();
+}
+function bind() {
+  document
+    .querySelectorAll<HTMLElement>("[data-go]")
+    .forEach((el) => (el.onclick = () => go(el.dataset.go!)));
+  document.querySelectorAll<HTMLElement>("[data-input]").forEach(
+    (el) =>
+      (el.onclick = () => {
+        input = el.dataset.input as Input;
+        render();
+      }),
+  );
+  $("#enable")?.addEventListener("click", enable);
+  $("#play")?.addEventListener("click", start);
+  $("#tutorial")?.addEventListener("click", tutorial);
+  $("#pause")?.addEventListener("click", () => pause("稍作休息，准备好后继续"));
+  $("#export")?.addEventListener("click", report);
+  $("#low")?.addEventListener("change", (e) => {
+    low = (e.target as HTMLInputElement).checked;
+    stage.low = low;
+  });
+  $("#preview")?.addEventListener("change", (e) => {
+    preview = (e.target as HTMLInputElement).checked;
+    mountPreview();
+  });
+  $("#preview-toggle")?.addEventListener("click", () => {
+    preview = !preview;
+    mountPreview();
+    $("#preview-toggle").textContent = preview ? "隐藏预览" : "显示预览";
+  });
+  $("#main-hand")?.addEventListener("change", (e) => {
+    mainHand = (e.target as HTMLSelectElement).value as typeof mainHand;
+    store("pulse-xy-main-hand", mainHand);
+    resetMenu();
+  });
+}
+function mountPreview() {
+  const slot = $("#video-slot");
+  if (slot) {
+    camera.mountPreview(slot, preview);
+    const canvas = $("#skeleton");
+    if (canvas) canvas.hidden = !preview;
+  }
+}
+function device() {
+  $("#camera-power").hidden = !camera.active;
+  $("#camera-dot").classList.toggle("on", camera.active);
+  $("#camera-status").textContent = loading
+    ? "正在准备相机与模型…"
+    : camera.active
+      ? `${verified ? "XY已定位" : "上半身待定位"} · ${camera.fps.toFixed(0)} FPS`
+      : "摄像头未开启";
+  const state = $("#readiness");
+  if (state)
+    state.textContent =
+      input === "keyboard"
+        ? "键盘模拟 · J 左 / K 右"
+        : bodyReady()
+          ? "上半身已就绪"
+          : camera.active
+            ? "请让双肩、双肘、双腕清晰可见"
+            : "先开启摄像头";
+}
+function go(next: string) {
+  generation++;
+  music.pause();
+  playing = false;
+  paused = false;
+  counting = false;
+  finishing = false;
+  guide = null;
+  $("#guide")?.remove();
+  $("#tutorial-modal")?.remove();
+  tracker.reset(calibration);
+  view = next;
+  render();
+}
+$("#camera-power").onclick = () => {
+  if (playing) pause("摄像头已关闭");
+  camera.stop();
+  frame = null;
+  stage.frame = null;
+  verified = false;
+  guide = null;
+  $("#guide")?.remove();
+  tracker.reset(calibration);
+  device();
+  if (view !== "play") render();
+};
+async function enable() {
+  if (loading) return;
+  loading = true;
+  device();
+  try {
+    if (!camera.active) await camera.start();
+    view = "lab";
+    render();
+    beginGuide();
+  } catch (e) {
+    toast("无法开启摄像头：" + String(e));
+  } finally {
+    loading = false;
+    device();
+  }
+}
+function beginGuide() {
+  verified = false;
+  capture.samples = [];
+  guide = {
+    step: 0,
+    start: performance.now(),
+    samples: [],
+    held: 0,
+    counts: { left: 0, right: 0 },
+  };
+  showGuide();
+}
+const guideText = [
+  [
+    "01 / 站稳",
+    "双肩、双肘、双腕入镜",
+    "正面自然站稳约2秒。不需要髋部或腿入镜。",
+  ],
+  [
+    "02 / 左右确认",
+    "举起你的左手",
+    "像照镜子一样；把左腕举到肩部上方，保持半秒。",
+  ],
+  ["03 / 左右确认", "再举起你的右手", "把右腕举到肩部上方，保持半秒。"],
+  [
+    "04 / 舒适范围",
+    "向左右与高低轻松伸展",
+    "在舒适范围展开双手，再举高、放低。不需要用力或把手伸出画面。",
+  ],
+];
+function showGuide() {
+  $("#guide")?.remove();
+  if (!guide) return;
+  resetMenu();
+  const t = guideText[guide.step];
+  const el = document.createElement("div");
+  el.id = "guide";
+  el.className = "modal-backdrop calibration-backdrop";
+  el.innerHTML = `<div class="modal calibration-modal"><div class="eyebrow">${t[0]}</div><h2>${t[1]}</h2><p>${t[2]}</p><div id="guide-state" class="guide-state">等待可靠输入</div><div class="guide-progress"><i id="guide-bar"></i></div><p id="guide-detail" class="fineprint">六个上半身点可用后继续</p><button id="cancel-guide" class="text-btn">取消定位</button></div>`;
+  document.body.append(el);
+  $("#cancel-guide").onclick = () => {
+    guide = null;
+    el.remove();
+    resetMenu();
+  };
+}
+function guideTick(now: number) {
+  if (!guide) return;
+  const g = guide,
+    d = inspectUpper(frame?.points ?? []),
+    fresh = !!frame && now - frame.time < 250;
+  let progress = 0,
+    detail = d.reason;
+  if (g.step === 0) {
+    const c = calibrateUpper(capture.samples);
+    progress = capture.progress("upper-body", now);
+    if (c && fresh) {
+      calibration = c;
+      tracker.reset(c);
+      g.step = 1;
+      g.start = now;
+      showGuide();
+      return;
+    }
+  } else if (g.step === 1 || g.step === 2) {
+    const i = g.step === 1 ? 15 : 16,
+      s = g.step === 1 ? 11 : 12;
+    const ready =
+      fresh && d.ready && frame!.points[i].y < frame!.points[s].y - 0.06;
+    if (ready) {
+      if (!g.held) g.held = now;
+      progress = (now - g.held) / 500;
+    } else g.held = 0;
+    if (progress >= 1) {
+      g.step++;
+      g.start = now;
+      g.held = 0;
+      showGuide();
+      return;
+    }
+  } else {
+    progress = Math.min(1, (now - g.start) / 8000);
+    detail = `舒适伸展 ${Math.max(0, Math.ceil(8 - (now - g.start) / 1000))} 秒 · ${d.reason}`;
+    if (progress >= 1 && calibration) {
+      if (!fresh || !d.ready || g.counts.left < 10 || g.counts.right < 10) {
+        g.start = now - 6000;
+        toast("双腕还不够清晰，请把手收进画面再试");
+        return;
+      }
+      const xs = g.samples.map((p) => p.x).sort((a, b) => a - b),
+        ys = g.samples.map((p) => p.y).sort((a, b) => a - b);
+      const q = (v: number[], n: number) => v[Math.floor((v.length - 1) * n)];
+      const sx = q(xs, 0.97) - q(xs, 0.03),
+        sy = q(ys, 0.97) - q(ys, 0.03);
+      if (sx < calibration.shoulder * 0.8 || sy < calibration.shoulder * 0.6) {
+        g.start = now - 4000;
+        g.samples = [];
+        g.counts = { left: 0, right: 0 };
+        toast("请再向左右和高低伸展，让目标位于舒适范围");
+        return;
+      }
+      calibration.reachX = Math.max(calibration.shoulder * 1.8, sx * 1.1);
+      calibration.reachY = Math.max(calibration.shoulder * 1.6, sy * 1.1);
+      calibration.centerY = (q(ys, 0.03) + q(ys, 0.97)) / 2;
+      store("pulse-xy-calibration", calibration);
+      tracker.reset(calibration);
+      verified = true;
+      guide = null;
+      $("#guide")?.remove();
+      go("home");
+      toast("上半身定位完成，可以进入舞台");
+      return;
+    }
+  }
+  $("#guide-state").textContent = fresh
+    ? d.ready
+      ? "上半身可用，跟随提示完成动作"
+      : d.reason
+    : "等待新画面";
+  $("#guide-detail").textContent = detail;
+  $("#guide-bar").style.width = Math.min(100, progress * 100) + "%";
+}
+function tutorial() {
+  resetMenu();
+  const el = document.createElement("div");
+  el.id = "tutorial-modal";
+  el.className = "modal-backdrop";
+  el.innerHTML = `<div class="modal tutorial"><div class="eyebrow">HOW TO PLAY / XY</div><h2>划过光点，跟上节拍。</h2><div class="tutorial-list"><p><b class="gold">L 暖金</b><span>用左手，在金色音符到达目标面时挥过它。</span></p><p><b class="cyan">R 青蓝</b><span>用右手，在蓝色音符到达目标面时挥过它。</span></p><p><b>双手同时</b><span>两个目标同时到拍，就用两只手一起挥。横、竖、斜方向都可以。</span></p><p><b>动起来</b><span>静止放着不会得分。不需要前后移动、下蹲或按箭头。</span></p></div><p class="fineprint">举双手过头顶保持1.5秒或按Esc暂停。键盘试玩使用J/K，只验证节奏。</p><button id="tutorial-done" class="primary">明白了 →</button></div>`;
+  document.body.append(el);
+  $("#tutorial-done").onclick = () => {
+    el.remove();
+    resetMenu();
+  };
+}
+async function start() {
+  if (loading) return;
+  if (input === "camera" && !camera.active) {
+    await enable();
+    return;
+  }
+  if (input === "camera" && !verified) {
+    view = "lab";
+    render();
+    beginGuide();
+    return;
+  }
+  if (input === "camera" && !bodyReady()) {
+    toast("请让双肩、双肘和双腕清晰入镜，再开始");
+    return;
+  }
+  loading = true;
+  const token = ++generation;
+  try {
+    const r = await fetch("/charts/xy-64.json");
+    if (!r.ok) throw Error("谱面读取失败");
+    const chart: Chart = await r.json();
+    const errors = validateChart(chart);
+    if (
+      chart.ruleVersion !== XY_RULE ||
+      chart.mode !== "XY" ||
+      chart.notes.some((n) => !["slash", "double"].includes(n.kind))
+    )
+      throw Error("谱面不是当前XY规则");
+    if (errors.length) throw Error(errors.join("/"));
+    await music.init();
+    if (token !== generation) return;
+    game = new XYGame(chart);
+    game.assisted = input === "keyboard";
+    stage.game = game;
+    stage.frame = input === "camera" ? frame : null;
+    stage.clearTrails();
+    stage.simulationHands = { left: null, right: null };
+    stats = { processing: [], fps: [], interruptions: [], judgements: [] };
+    tracker.reset(calibration);
+    missingSince = { left: 0, right: 0, shoulders: 0 };
+    lowSince = 0;
+    aboveSince = 0;
+    game.onJudge = (j) => {
+      stage.flash(j);
+      music.hit(j.grade);
+      stats.judgements.push({
+        id: j.note.id,
+        grade: j.grade,
+        error: j.error,
+        factor: j.factor,
+        action: j.action,
+      });
+    };
+    view = "play";
+    playing = true;
+    paused = false;
+    counting = true;
+    finishing = false;
+    render();
+    music.play(0, 2);
+  } catch (e) {
+    toast("无法开始：" + String(e));
+  } finally {
+    loading = false;
+  }
+}
+function pause(reason: string) {
+  if (!playing || !game) return;
+  music.pause();
+  playing = false;
+  paused = true;
+  counting = false;
+  game.assisted = true;
+  tracker.reset(calibration);
+  stats.interruptions.push(reason);
+  resetMenu();
+  const el = $("#pause-overlay");
+  el.hidden = false;
+  el.className = "modal-backdrop";
+  el.innerHTML = `<div class="modal"><div class="eyebrow">STAGE PAUSED</div><h2>舞台等你回来。</h2><p>${escape(reason)}</p><p class="fineprint">继续会从安全乐句恢复，并重算回放区间；本局为辅助练习。</p><div class="modal-actions"><button class="text-btn" data-back>返回准备</button><button class="secondary" id="restart">重新开始</button><button class="primary" id="resume">继续 ▷</button></div></div>`;
+  el.querySelector<HTMLElement>("[data-back]")!.onclick = () => go("home");
+  $("#restart").onclick = start;
+  $("#resume").onclick = async () => {
+    if (input === "camera" && (!bodyReady() || camera.health.pause)) {
+      toast("请先恢复上半身输入；输入检查可帮助定位问题");
+      return;
+    }
+    try {
+      await music.init();
+      const from = Math.max(0, Math.floor(music.offset / 4) * 4);
+      game!.rewind(from);
+      tracker.reset(calibration);
+      stage.clearTrails();
+      music.play(from, 2);
+      playing = true;
+      paused = false;
+      counting = true;
+      missingSince = { left: 0, right: 0, shoulders: 0 };
+      lowSince = 0;
+      aboveSince = 0;
+      el.hidden = true;
+      resetMenu();
+    } catch (e) {
+      toast(String(e));
+    }
+  };
+}
+function bestKey() {
+  return `${game?.chart.id}/${game?.chart.version}/${XY_RULE}/xy-map-1.3/camera`;
+}
+function finish() {
+  if (!game || finishing) return;
+  game.tick(65);
+  playing = false;
+  counting = false;
+  paused = false;
+  finishing = true;
+  music.pause();
+  tracker.reset(calibration);
+  resetMenu();
+  $("#pause").hidden = true;
+  $("#center-message").innerHTML =
+    '<strong class="complete-title">SONG<br>COMPLETE</strong><span>一分钟的光，由你点亮</span>';
+  const token = generation;
+  setTimeout(() => {
+    if (token !== generation || !game) return;
+    const bests = safe<Record<string, number>>("pulse-xy-bests", {});
+    if (!game.assisted && input === "camera") {
+      bests[bestKey()] = Math.max(bests[bestKey()] ?? 0, game.score);
+      store("pulse-xy-bests", bests);
+    }
+    finishing = false;
+    view = "results";
+    render();
+  }, 1400);
+}
+function dispatch(a: Action) {
+  if (!playing || !game || counting || music.time < 0) return;
+  const time = music.eventTime(a.time),
+    prevTime = a.prevTime === undefined ? time : music.eventTime(a.prevTime);
+  game.consume({ ...a, time, prevTime });
+}
+camera.onError = (s) => {
+  if (playing) pause("输入异常：" + s);
+  toast(s);
+};
+camera.onPose = (points, time, processing) => {
+  lastPose = performance.now();
+  if (guide?.step === 0) capture.add(points, time);
+  if (guide?.step === 3) {
+    const upper = inspectUpper(points);
+    for (const hand of ["left", "right"] as const) {
+      const i = hand === "left" ? 15 : 16;
+      if (upper[hand]) {
+        guide.samples.push(points[i]);
+        guide.counts[hand]++;
+      }
+    }
+  }
+  const previous = frame;
+  frame = tracker.process(points, time, processing);
+  if (input === "camera") stage.frame = frame;
+  const d = inspectUpper(points);
+  for (const hand of ["left", "right"] as const) {
+    if (d[hand]) missingSince[hand] = 0;
+    else if (!missingSince[hand]) missingSince[hand] = lastPose;
+  }
+  if (d.shoulders) missingSince.shoulders = 0;
+  else if (!missingSince.shoulders) missingSince.shoulders = lastPose;
+  if (!playing || input !== "camera" || !game || counting) return;
+  const at = music.eventTime(time);
+  if (previous && time - previous.time > 150)
+    for (const hand of ["left", "right"] as const)
+      game.protectHand(music.eventTime(previous.time), at, hand);
+  for (const hand of ["left", "right"] as const)
+    if (!d[hand]) game.protectHand(at - 0.26, at, hand);
+  for (const a of frame.actions) dispatch(a);
+  stats.processing.push(processing);
+  stats.fps.push(camera.fps);
+};
+let keyId = 0;
+function keyAction(hand: "left" | "right") {
+  if (!playing || !game || counting) return;
+  const at = music.time;
+  const n = game.chart.notes
+    .filter(
+      (n) =>
+        !game!.results.has(n.id) &&
+        (!n.hand || n.hand === hand) &&
+        !game!.hits.get(n.id)?.has(hand),
+    )
+    .sort((a, b) => Math.abs(a.time - at) - Math.abs(b.time - at))[0];
+  if (!n || Math.abs(n.time - at) > 0.4) return;
+  const x = n.kind === "double" ? (hand === "left" ? 0.32 : 0.68) : n.x;
+  stage.simulationHands[hand] = { x, y: n.y };
+  stage.simulationAt = performance.now();
+  dispatch({
+    id: `key-${++keyId}`,
+    kind: "hand",
+    hand,
+    time: performance.now(),
+    prevTime: performance.now(),
+    x: x + 0.1,
+    y: n.y,
+    prevX: x - 0.1,
+    prevY: n.y,
+    dx: 0.2,
+    dy: 0,
+    speed: 2,
+    confidence: 1,
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if ((e.target as HTMLElement).matches("input,select,textarea")) return;
+  if (e.key === "Escape") {
+    if (playing) pause("已暂停");
+    return;
+  }
+  if (
+    input === "keyboard" &&
+    !e.repeat &&
+    ["j", "k"].includes(e.key.toLowerCase())
+  ) {
+    e.preventDefault();
+    keyAction(e.key.toLowerCase() === "j" ? "left" : "right");
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && playing) pause("页面进入后台，音乐与评分已暂停");
+});
+window.addEventListener("blur", () => {
+  if (playing) pause("窗口失去焦点，音乐与评分已暂停");
+});
+function report() {
+  const percentile = (a: number[], q: number) =>
+    a.length
+      ? [...a].sort((x, y) => x - y)[Math.floor((a.length - 1) * q)]
+      : null;
+  const data = {
+    app: "Pulse Stage",
+    version: VERSION,
+    requirement: "1.3",
+    rule: XY_RULE,
+    createdAt: new Date().toISOString(),
+    input,
+    model: POSE_MODEL,
+    userAgent: navigator.userAgent,
+    calibration,
+    inputHealth: camera.health,
+    chart: game?.chart,
+    game: game
+      ? {
+          score: game.score,
+          accuracy: game.accuracy,
+          counts: game.counts,
+          maxCombo: game.maxCombo,
+          assisted: game.assisted,
+        }
+      : null,
+    metrics: {
+      inferenceP95Ms: percentile(stats.processing, 0.95),
+      poseFpsMedian: percentile(stats.fps, 0.5),
+      endToEndLatencyMs: null,
+      humanValidatedAccuracy: null,
+    },
+    stats,
+    privacy: "no raw video or continuous landmarks",
+    verification:
+      "Keyboard/synthetic tests are not real-camera accuracy evidence.",
+  };
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pulse-xy-report-${Date.now()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function paintInput() {
+  const panel = $("#joint-diagnostics"),
+    d = inspectUpper(frame?.points ?? []);
+  if (panel)
+    panel.innerHTML = `<div class="joint-summary">上半身六点 · 同一65%可信门槛 · 髋部不参与</div><div class="joint-grid">${d.joints.map((j) => `<div class="joint-item ${j.status}"><b>${j.label}</b><span>${j.status === "ready" ? "可用" : j.status === "outside" ? "画面外" : j.status === "missing" ? "无数据" : "不可靠"} · ${Math.round(j.confidence * 100)}%</span></div>`).join("")}</div>`;
+  if ($("#signal-reason")) {
+    $("#signal-reason").textContent = d.reason;
+    $("#pose-fps").textContent = camera.fps.toFixed(1);
+    $("#inference").textContent = `${frame?.processing.toFixed(0) ?? "—"} ms`;
+    $("#map-state").textContent = verified ? "已定位" : "待定位";
+  }
+  const map = $("#xy-map");
+  if (map)
+    for (const hand of ["left", "right"] as const) {
+      const el = map.querySelector<HTMLElement>(
+          hand === "left" ? ".map-left" : ".map-right",
+        )!,
+        p = frame?.hands[hand];
+      el.hidden = !p;
+      if (p) {
+        el.style.left = p.x * 100 + "%";
+        el.style.top = p.y * 100 + "%";
+      }
+    }
+  const canvas = $<HTMLCanvasElement>("#skeleton");
+  if (!canvas || !preview) return;
+  const r = canvas.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const videoWidth = camera.video.videoWidth || 640,
+    videoHeight = camera.video.videoHeight || 480,
+    s = Math.min(r.width / videoWidth, r.height / videoHeight),
+    w = videoWidth * s,
+    h = videoHeight * s;
+  ctx.translate((r.width - w) / 2, (r.height - h) / 2);
+  const points = frame?.points ?? [];
+  const xy = (i: number) => ({ x: (1 - points[i].x) * w, y: points[i].y * h });
+  for (const [a, b] of [
+    [11, 12],
+    [11, 13],
+    [13, 15],
+    [12, 14],
+    [14, 16],
+  ])
+    if (points[a] && points[b]) {
+      ctx.strokeStyle =
+        jointStatus(points[a]) === "ready" && jointStatus(points[b]) === "ready"
+          ? "#69e9ff"
+          : "#dca87066";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xy(a).x, xy(a).y);
+      ctx.lineTo(xy(b).x, xy(b).y);
+      ctx.stroke();
+    }
+  for (const j of d.joints)
+    if (points[j.id] && jointStatus(points[j.id]) !== "outside") {
+      ctx.fillStyle =
+        j.status === "ready"
+          ? j.id === 15
+            ? "#ffd27a"
+            : "#69e9ff"
+          : "#dca87088";
+      ctx.beginPath();
+      ctx.arc(xy(j.id).x, xy(j.id).y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+}
+function dwell(now: number) {
+  const cursor = $("#hand-cursor"),
+    modal = $("#guide");
+  if (
+    !camera.active ||
+    !verified ||
+    !frame?.hands[mainHand] ||
+    now - frame.time > 250 ||
+    playing ||
+    finishing ||
+    modal
+  ) {
+    cursor.classList.remove("visible");
+    dwellState.el = null;
+    dwellState.since = now;
+    return;
+  }
+  const p = frame.hands[mainHand]!,
+    x = p.x * innerWidth,
+    y = p.y * innerHeight;
+  cursor.classList.add("visible");
+  cursor.style.left = x + "px";
+  cursor.style.top = y + "px";
+  const target =
+    document
+      .elementFromPoint(x, y)
+      ?.closest<HTMLElement>("button:not(:disabled)") ?? null;
+  if (!target) {
+    dwellState.armed = true;
+    dwellState.el = null;
+    cursor.style.setProperty("--progress", "0deg");
+    return;
+  }
+  if (!dwellState.armed) return;
+  if (dwellState.el !== target) {
+    dwellState.el = target;
+    dwellState.since = now;
+  }
+  const progress = (now - dwellState.since) / 1000;
+  cursor.style.setProperty("--progress", Math.min(360, progress * 360) + "deg");
+  if (progress >= 1) {
+    dwellState = { el: null, since: now, armed: false };
+    target.click();
+  }
+}
+let lastPaint = 0;
+function animate(now: number) {
+  requestAnimationFrame(animate);
+  stage.time = music.time;
+  stage.draw(now);
+  if (guide) guideTick(now);
+  if (view === "play" && playing && game) {
+    const time = music.time;
+    if (counting) {
+      if (time < 0 || time < music.offset) {
+        const remaining = music.started - (music.ctx?.currentTime ?? 0);
+        $("#center-message").innerHTML =
+          `<strong>${Math.max(1, Math.ceil(remaining / 0.5))}</strong><span>音符到面，划过光点</span>`;
+      } else {
+        counting = false;
+        $("#center-message").innerHTML = "";
+        tracker.reset(calibration);
+      }
+    }
+    if (!counting) {
+      if (music.ctx && music.ctx.state !== "running")
+        pause("音乐输出已暂停，请恢复音频后继续");
+      if (input === "camera") {
+        const health = camera.health;
+        if (health.pause) pause(health.message);
+        if (health.slow) {
+          if (!lowSince) lowSince = now;
+          if (now - lowSince > 2000) {
+            if (!game.assisted) {
+              stats.interruptions.push("slow-inference");
+              toast("识别偏慢，本局转为辅助练习，已降低特效");
+            }
+            game.assisted = true;
+            stage.low = true;
+          }
+        } else lowSince = 0;
+        for (const hand of ["left", "right"] as const)
+          if (missingSince[hand] && now - missingSince[hand] > 800)
+            pause(
+              `${hand === "left" ? "左" : "右"}手臂持续不可用，请收回取景范围`,
+            );
+        if (missingSince.shoulders && now - missingSince.shoulders > 500)
+          pause("双肩定位暂时丢失，请正面回到画面中");
+        if (frame && now - frame.time > 250)
+          for (const hand of ["left", "right"] as const)
+            game.protectHand(time - 0.26, time, hand);
+        $("#tracking-status").textContent = game.assisted
+          ? "辅助练习 · " +
+            (health.slow ? health.message : (frame?.reason ?? "等待输入"))
+          : `${camera.fps.toFixed(0)} FPS · ${frame?.reason ?? "等待输入"}`;
+        const p = frame?.points;
+        if (
+          frame &&
+          now - frame.time < 250 &&
+          p &&
+          jointStatus(p[15]) === "ready" &&
+          jointStatus(p[16]) === "ready" &&
+          jointStatus(p[0]) === "ready" &&
+          p[15].y < p[0].y - 0.02 &&
+          p[16].y < p[0].y - 0.02 &&
+          Math.abs(p[15].x - p[16].x) < 0.2
+        ) {
+          if (!aboveSince) aboveSince = now;
+          if (now - aboveSince > 1500) pause("举手暂停");
+        } else aboveSince = 0;
+      }
+      if (playing) {
+        game.tick(time);
+        if (time >= 64.05) finish();
+      }
+    }
+    $("#score").textContent = String(game.score).padStart(7, "0");
+    $("#combo").textContent = String(game.combo);
+    $("#time").textContent =
+      `${Math.floor(Math.max(0, time) / 60)}:${String(Math.floor(Math.max(0, time)) % 60).padStart(2, "0")}`;
+    $("#progress").style.width =
+      Math.min(100, (Math.max(0, time) / 64) * 100) + "%";
+  }
+  if (now - lastPaint > 100) {
+    lastPaint = now;
+    paintInput();
+    device();
+    $("#fps").textContent =
+      `${stage.fps.toFixed(0)} RENDER FPS${camera.active ? " / " + camera.fps.toFixed(0) + " POSE FPS" : ""}`;
+  }
+  dwell(now);
+}
+render();
+requestAnimationFrame(animate);
+window.addEventListener("pagehide", () => {
+  camera.stop();
+  music.pause();
+});

@@ -1,0 +1,1327 @@
+import "./style.css";
+import { Camera } from "./camera";
+import { POSE_MODEL } from "./model";
+import {
+  MotionTracker,
+  makeCalibration,
+  CalibrationCapture,
+  inspectPose,
+  jointStatus,
+  CALIBRATION_CONFIDENCE,
+} from "./motion";
+import { Music } from "./audio";
+import { Stage } from "./stage";
+import { Game, validateChart, RULE_VERSION } from "./game";
+import type {
+  Action,
+  Calibration,
+  Chart,
+  Direction,
+  Input,
+  Mode,
+  MotionFrame,
+  Point,
+} from "./types";
+const $ = <T extends HTMLElement = HTMLElement>(s: string) =>
+  document.querySelector<T>(s)!;
+const safe = <T>(k: string, f: T): T => {
+  try {
+    return JSON.parse(localStorage.getItem(k) || "null") ?? f;
+  } catch {
+    return f;
+  }
+};
+const save = (key: string, v: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    toast("本地保存失败，请导出本局结果");
+  }
+};
+const escape = (s: string) =>
+  s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+$("#app").innerHTML =
+  `<div id="stage"></div><div class="vignette"></div><header class="topbar"><a class="brand" href="#" aria-label="返回首页"><span class="brand-mark">P</span><span>PULSE<span class="brand-light">STAGE</span><small>星 跃 律 动</small></span></a><div class="nav"><button data-go="home" class="nav-item">舞台</button><button data-go="lab" class="nav-item">动作实验室 <span class="tag">LAB</span></button></div><div class="device"><i id="camera-dot"></i><span id="camera-status">摄像头未开启</span><button id="camera-power" class="icon-btn" title="关闭摄像头" hidden>⏻</button></div></header><main id="content"></main><div id="toast" role="status"></div><div id="hand-cursor" aria-hidden="true"></div><footer class="footer"><span>LOCAL PROTOTYPE <b>v0.1.2</b></span><span>单目视觉 · 本地计算 · 无手柄</span><span id="fps">MAC / WEBGL</span></footer>`;
+const camera = new Camera(),
+  tracker = new MotionTracker(),
+  music = new Music(),
+  stage = new Stage($("#stage"));
+let view = "home",
+  mode: Mode = "XY",
+  input: Input = "camera",
+  duration = 60,
+  reverse = false,
+  low = false,
+  preview = true,
+  offset = safe("pulse-offset", 0),
+  game: Game | null = null,
+  frame: MotionFrame | null = null,
+  playing = false,
+  paused = false,
+  counting = false,
+  pauseReason = "",
+  lastPose = 0,
+  lowSince = 0,
+  badSince = 0,
+  currentKey = 0,
+  lastZ = -Infinity,
+  finishAt = 0,
+  navDwell: { el: HTMLElement | null; since: number } = { el: null, since: 0 },
+  aboveSince = 0;
+let stats: {
+  processing: number[];
+  fps: number[];
+  judgements: unknown[];
+  interruptions: string[];
+} = { processing: [], fps: [], judgements: [], interruptions: [] };
+let logs: unknown[] = [],
+  trials: {
+    label: string;
+    prediction: string;
+    confidence: number;
+    phase: string;
+    time: number;
+    tester: string;
+    verifiedByHuman: boolean;
+  }[] = [];
+let trial: {
+  label: string;
+  start: number;
+  events: Action[];
+  auto: boolean;
+} | null = null;
+let calibration: Calibration | null = safe<Calibration | null>(
+  "pulse-calibration",
+  null,
+);
+tracker.reset(calibration);
+let cameraLoading = false;
+let tutorialSeen = safe("pulse-tutorial", false);
+const capture = new CalibrationCapture();
+let sessionVerified = false,
+  guide: {
+    step: number;
+    start: number;
+    frames: Point[][];
+    depth: number;
+    correct: number;
+    answered: number;
+    total: number;
+    left: number[];
+    right: number[];
+  } | null = null;
+let sync: {
+  start: number;
+  taps: number[];
+  beats: number;
+  nextBeat: number;
+  timer: number;
+} | null = null;
+const labels: Record<Mode, string> = {
+  XY: "原地律动",
+  Z0: "空间脉冲",
+  Z1: "前后律动",
+};
+const modes = () =>
+  `<div class="modes" role="group" aria-label="动作配置">${(["XY", "Z0", "Z1"] as Mode[]).map((m) => `<button class="mode ${mode === m ? "selected" : ""}" data-mode="${m}" aria-pressed="${mode === m}"><span>${m}</span><strong>${labels[m]}</strong><small>${m === "XY" ? "双手 × 节奏" : m === "Z0" ? "前后任意方向" : "指定靠近 / 远离"}${m === "Z1" ? " · 实验" : ""}</small></button>`).join("")}</div>`;
+function toast(s: string) {
+  $("#toast").textContent = s;
+  $("#toast").classList.add("show");
+  window.setTimeout(() => $("#toast").classList.remove("show"), 4500);
+}
+function log(v: unknown) {
+  logs.push(v);
+  if (logs.length > 1500) logs.shift();
+}
+function stateLabel() {
+  if (
+    input === "camera" &&
+    camera.active &&
+    sessionVerified &&
+    calibration?.profile === "upper-body"
+  )
+    return "上半身XY已就绪 · Z未启用";
+  return input === "keyboard"
+    ? "键盘模拟"
+    : !camera.active
+      ? "摄像头待开启"
+      : !sessionVerified
+        ? "需要校准"
+        : mode === "Z1" && !calibration?.z1
+          ? "方向校准未通过"
+          : mode === "Z0" && !calibration?.z0
+            ? "纵深校准未通过"
+            : "准备就绪";
+}
+function render() {
+  stage.active = view === "play";
+  $("#content").className = `view-${view}`;
+  $(".topbar").classList.toggle("in-game", view === "play");
+  $(".footer").hidden = view === "play";
+  document
+    .querySelectorAll("[data-go]")
+    .forEach((el) =>
+      el.classList.toggle("active", (el as HTMLElement).dataset.go === view),
+    );
+  if (view === "home")
+    $("#content").innerHTML =
+      `<section class="hero"><div class="eyebrow"><span class="live-line"></span> YOUR BODY. YOUR BEAT.</div><h1>让身体，<br>点亮<span class="gradient-text">节拍。</span></h1><p class="hero-copy">不用手柄，走进你的未来舞台。<br>挥动双手、跟随节奏，让每一次律动变成光。</p><div class="hero-actions"><button class="primary" id="begin">${camera.active ? "重新校准" : "开启摄像头"} <span>↗</span></button><button class="text-btn" data-go="lab">先去动作实验室 <span>→</span></button></div><div class="privacy-line"><span class="tiny-diamond"></span> 画面仅在这台 Mac 上处理，不上传、不录制</div></section><aside class="orbit-label"><span>01 / FUTURE STAGE</span><h2>NEON<br>BLOOM<span>光 绽</span></h2><div class="orbital-rule"></div><p>原创电子节奏 / 120 BPM</p><div class="axis-labels"><b>X</b><span>横向挥切</span><b>Y</b><span>高低接拍</span><b>Z</b><span>空间律动</span></div></aside><section class="launch-panel"><div class="track-info"><div class="album"><span>NB</span><i></i></div><div><span class="section-label">NOW PLAYING</span><h3>Neon Bloom <span>光绽</span></h3><p>原创合成音乐 · 单人体验 · ${duration} 秒</p></div>${mode === "Z1" ? `<label class="toggle reverse-toggle"><input type="checkbox" id="reverse" ${reverse ? "checked" : ""}>反向顺序</label>` : ""}<button class="duration-btn" id="duration">${duration === 60 ? "60 秒完整体验" : "32 秒对照段"} ⌄</button></div>${modes()}<div class="launch-bottom"><div class="input-switch"><button data-input="camera" class="${input === "camera" ? "on" : ""}">摄像头输入</button><button data-input="keyboard" class="${input === "keyboard" ? "on" : ""}">键盘测试</button></div><button class="text-btn how-to" id="how-to">玩法图例</button><span class="readiness"><i class="${input === "keyboard" ? "amber" : ""}"></i>${stateLabel()}</span><label class="toggle"><input type="checkbox" id="low" ${low ? "checked" : ""}>低特效</label><button id="play" class="primary play-btn">进入舞台 <span>▷</span></button></div>${input === "keyboard" ? '<div class="sim-warning">模拟输入仅验证玩法和判分，不代表摄像头识别已通过。J / K 双手，↑ / ↓ 挥切，A / D 侧摆，W / S 靠近或远离。</div>' : ""}</section>`;
+  if (view === "lab")
+    $("#content").innerHTML =
+      `<section class="lab-header"><div><div class="eyebrow">MOTION LAB / 单目视觉实验</div><h1>看见你的<span>律动。</span></h1><p>先观察真实输入，再把动作变成游戏。Z 方向是估计，证据不足时显示不确定。</p></div><div class="lab-actions"><button class="secondary" id="export">导出报告 ↗</button><button class="primary" id="begin">${camera.active ? "站位与 Z 校准" : "开启摄像头"} <span>↗</span></button></div></section><div class="lab-grid"><div class="camera-card"><div class="card-top"><span><i class="status-dot"></i> LIVE INPUT</span><label class="toggle"><input type="checkbox" id="preview" ${preview ? "checked" : ""}>显示画面</label></div><div id="video-slot"><canvas id="skeleton"></canvas><div class="camera-empty">${camera.active ? "" : '<span class="scan-icon">⌗</span><h3>把自己带进画面</h3><p>开启摄像头，固定 Mac，正面站立。<br>请让双手与肩髋完整入镜。</p>'}</div></div><div id="joint-diagnostics" class="joint-diagnostics"></div><div class="camera-caption"><span id="lab-quality">等待摄像头</span><span>镜像预览 / 无视频上传</span></div></div><div class="signal-card"><p class="model-info">${POSE_MODEL.name} · ${POSE_MODEL.landmarks} 点 · ${POSE_MODEL.delegate}/WASM</p><div class="card-top"><span>Z-AXIS / 纵深信号</span><span class="tag">EXPERIMENTAL</span></div><div id="direction-label" class="direction-label">等待输入</div><p id="signal-reason">校准后观察相对尺度与前后移动趋势</p><canvas id="signal-graph"></canvas><div class="signal-stats"><div><small>相对尺度</small><strong id="scale-value">—</strong></div><div><small>证据置信度</small><strong id="confidence-value">—</strong></div><div><small>推理耗时</small><strong id="inference-value">—</strong></div></div><label class="threshold">纵深阈值 <input id="threshold" type="range" min="0.02" max="0.12" step="0.005" value="${calibration?.threshold ?? 0.035}"><span id="threshold-label">${((calibration?.threshold ?? 0.035) * 100).toFixed(1)}%</span></label><p class="fineprint">相对尺度不是距离；转身、弯腰、裁切都可能影响结果。修改阈值会写入报告。</p></div></div><div class="lab-tools"><div><h3>有真值的动作试验</h3><p>看提示完成动作，观察者确认后记录；回位阶段不计入目标动作。</p></div><input id="tester" aria-label="测试者代号" placeholder="匿名测试者代号" value="P01" maxlength="24"><select id="trial-label" aria-label="试验动作"><option value="toward_camera">靠近摄像头</option><option value="away_from_camera">远离摄像头</option><option value="arm">原地挥臂（负样本）</option><option value="turn">侧转（负样本）</option><option value="squat">屈膝（负样本）</option><option value="still">静止（负样本）</option></select><button id="trial-start" class="secondary">开始一次试验</button><button id="reset-origin" class="text-btn">重设站位</button></div><div id="trial-status" class="trial-status">准备 1 秒 → 动作 2 秒 → 回位 2 秒；人工确认是否按要求完成后保存。</div><div class="lab-bottom"><span id="trial-count">已记录 ${trials.length} 条试验</span><button class="text-btn" id="sync">节拍校准 ${offset >= 0 ? "+" : ""}${offset}ms</button><button class="text-btn" id="clear">清除本地档案</button><button class="primary" data-go="home">返回舞台 →</button></div>`;
+  if (view === "play")
+    $("#content").innerHTML =
+      `<div class="game-top"><div><span class="section-label">NEON BLOOM / ${labels[mode]}</span><h3>光绽 <span>${input === "keyboard" ? "模拟输入" : calibration?.profile === "upper-body" ? "摄像头 · 上半身XY" : "摄像头输入"}${mode === "Z1" ? " · 方向实验" : ""}</span></h3></div><div class="game-score"><span>SCORE</span><strong id="score">0000000</strong></div><button class="secondary" id="pause">Ⅱ 暂停</button></div><div class="combo"><strong id="combo">0</strong><span>COMBO</span></div><div id="z-cue" class="z-cue"></div><div id="center-message" class="center-message"></div><div class="game-bottom"><div class="hand-key left">◉ <b>左手</b><span>${input === "keyboard" ? "J 接拍 / ↑ 上切" : "接拍与光刃"}</span></div><div class="song-progress"><div><span id="time">0:00</span><span>${duration === 60 ? "1:00" : "0:32"}</span></div><i><b id="progress"></b></i><p id="tracking-status">${input === "keyboard" ? "键盘模拟 · 不作为识别证据" : "让身体留在镜头里，跟随节拍"}</p></div><div class="hand-key right">◇ <b>右手</b><span>${input === "keyboard" ? "K 接拍 / ↓ 下切" : "接拍与光刃"}</span></div></div><div id="pause-overlay" hidden></div>`;
+  if (view === "results" && game) {
+    const counts = game.counts,
+      best = safe<Record<string, number>>("pulse-bests", {})[bestKey()] ?? 0;
+    const rating =
+      game.accuracy >= 95
+        ? "S"
+        : game.accuracy >= 85
+          ? "A"
+          : game.accuracy >= 70
+            ? "B"
+            : game.accuracy >= 50
+              ? "C"
+              : "D";
+    $("#content").innerHTML =
+      `<section class="results"><div class="eyebrow">PERFORMANCE COMPLETE</div><h1>这一刻，你就是<span>光。</span></h1><div class="result-card"><div class="rating">${rating}<small>${game.assisted ? "辅助成绩" : input === "keyboard" ? "模拟成绩" : "本机原型成绩"}</small></div><div class="result-score"><span>NEON BLOOM · ${mode} · ${duration}S</span><strong>${game.score.toLocaleString()}</strong><p>个人最佳 ${best.toLocaleString()} · 不同配置独立记录</p></div><div class="result-metrics"><div><strong>${game.accuracy.toFixed(1)}<small>%</small></strong><span>完成准确率</span></div><div><strong>${game.maxCombo}</strong><span>最高连击</span></div></div></div><div class="judgement-grid">${Object.entries(
+        counts,
+      )
+        .map(
+          ([k, v]) =>
+            `<div><span>${k === "Protected" ? "识别保护" : k === "Wrong Direction" ? "方向相反" : k}</span><strong>${v}</strong></div>`,
+        )
+        .join(
+          "",
+        )}</div><p class="result-note">${input === "keyboard" ? "本局使用键盘模拟，未验证真实人体识别。" : mode === "Z1" ? "前后方向为单目估计；本次成绩不代表多环境识别验收已通过。" : "本局数据仅用于原型体验，识别精度仍需独立真人测试。"}</p><div class="result-actions"><button class="secondary" data-go="home">选择配置</button><button class="secondary" id="export">导出本局 ↗</button><button class="primary" id="play">再跳一次 ▷</button></div></section>`;
+  }
+  bind();
+  mountVideo();
+  updateDevice();
+}
+function bind() {
+  document
+    .querySelectorAll<HTMLElement>("[data-go]")
+    .forEach((e) => (e.onclick = () => go(e.dataset.go!)));
+  document.querySelectorAll<HTMLElement>("[data-mode]").forEach(
+    (e) =>
+      (e.onclick = () => {
+        mode = e.dataset.mode as Mode;
+        render();
+      }),
+  );
+  document.querySelectorAll<HTMLElement>("[data-input]").forEach(
+    (e) =>
+      (e.onclick = () => {
+        input = e.dataset.input as Input;
+        render();
+      }),
+  );
+  $("#begin")?.addEventListener("click", enableCamera);
+  $("#play")?.addEventListener("click", startGame);
+  $("#pause")?.addEventListener("click", () => pause("稍作休息，准备好后继续"));
+  $("#reverse")?.addEventListener("change", (e) => {
+    reverse = (e.target as HTMLInputElement).checked;
+  });
+  $("#duration")?.addEventListener("click", () => {
+    duration = duration === 60 ? 32 : 60;
+    render();
+  });
+  $("#low")?.addEventListener("change", (e) => {
+    low = (e.target as HTMLInputElement).checked;
+    stage.low = low;
+  });
+  $("#preview")?.addEventListener("change", (e) => {
+    preview = (e.target as HTMLInputElement).checked;
+    camera.setPreviewVisible(preview);
+  });
+  $("#how-to")?.addEventListener("click", () => showTutorial(false));
+  $("#export")?.addEventListener("click", exportReport);
+  $("#sync")?.addEventListener("click", startSync);
+  $("#clear")?.addEventListener("click", () => {
+    if (confirm("清除本站的校准、成绩和设置？已导出文件不受影响。")) {
+      for (const k of [
+        "pulse-calibration",
+        "pulse-offset",
+        "pulse-bests",
+        "pulse-tutorial",
+      ])
+        localStorage.removeItem(k);
+      calibration = null;
+      tracker.reset(null);
+      sessionVerified = false;
+      offset = 0;
+      trials = [];
+      logs = [];
+      tutorialSeen = false;
+      render();
+      toast("本地档案已清除");
+    }
+  });
+  $("#threshold")?.addEventListener("input", (e) => {
+    if (calibration) {
+      calibration.threshold = Number((e.target as HTMLInputElement).value);
+      tracker.reset(calibration);
+      save("pulse-calibration", calibration);
+      log({
+        type: "parameter",
+        threshold: calibration.threshold,
+        time: Date.now(),
+      });
+      $("#threshold-label").textContent =
+        (calibration.threshold * 100).toFixed(1) + "%";
+    }
+  });
+  $("#reset-origin")?.addEventListener("click", () => {
+    if (!frame?.quality) return toast("先让双肩清晰入镜");
+    const c = makeCalibration(
+      Array(25).fill(frame.points),
+      calibration?.profile ?? "full-body",
+    );
+    if (c) {
+      c.z0 = calibration?.z0 ?? false;
+      c.z1 = calibration?.z1 ?? false;
+      c.threshold = calibration?.threshold ?? 0.035;
+      calibration = c;
+      tracker.reset(c);
+      save("pulse-calibration", c);
+      log({ type: "origin-reset", time: Date.now() });
+      toast("已明确重设参考站位");
+    }
+  });
+  $("#trial-start")?.addEventListener("click", () => {
+    if (!camera.active || !sessionVerified)
+      return toast("先开启摄像头并完成站位校准");
+    if (calibration?.profile === "upper-body")
+      return toast("当前为上半身XY模式；Z动作试验需要重新完成双肩双髋校准");
+    if (trial) return;
+    trial = {
+      label: $("#trial-label")
+        ? ($("#trial-label") as HTMLSelectElement).value
+        : "still",
+      start: performance.now(),
+      events: [],
+      auto: false,
+    };
+  });
+}
+$(".brand").addEventListener("click", (e) => {
+  e.preventDefault();
+  go("home");
+});
+$("#camera-power").addEventListener("click", () => {
+  if (playing) pause("摄像头已关闭");
+  camera.stop();
+  sessionVerified = false;
+  frame = null;
+  stage.frame = null;
+  updateDevice();
+  if (view !== "play") render();
+});
+function go(next: string) {
+  if (playing || counting) {
+    music.pause();
+    playing = false;
+    counting = false;
+    paused = false;
+  }
+  guide = null;
+  $("#guide")?.remove();
+  $("#tutorial")?.remove();
+  trial = null;
+  stopSync();
+  view = next;
+  stage.active = false;
+  render();
+}
+function mountVideo() {
+  const slot = $("#video-slot");
+  if (slot && camera.active) {
+    camera.mountPreview(slot, preview);
+  }
+}
+function updateDevice() {
+  const active = camera.active;
+  $("#camera-dot").className = active ? "live" : "";
+  $("#camera-status").textContent = active
+    ? camera.health.message
+    : "摄像头未开启";
+  $("#camera-power").hidden = !active;
+}
+async function enableCamera() {
+  if (cameraLoading) return;
+  cameraLoading = true;
+  const begin = $("#begin") as HTMLButtonElement | null;
+  if (begin) {
+    begin.disabled = true;
+    begin.textContent = "准备摄像头…";
+  }
+  try {
+    if (!camera.active) {
+      toast("正在准备摄像头与本地识别模型…");
+      await camera.start();
+    }
+    input = "camera";
+    sessionVerified = false;
+    view = "lab";
+    render();
+    beginGuide();
+  } catch (e) {
+    toast(`无法开启摄像头：${String(e)}。请检查浏览器权限与其他相机应用。`);
+    log({ type: "camera-error", error: String(e) });
+    render();
+  } finally {
+    cameraLoading = false;
+    const b = $("#begin") as HTMLButtonElement | null;
+    if (b) {
+      b.disabled = false;
+      b.textContent = camera.active ? "站位与 Z 校准 ↗" : "开启摄像头 ↗";
+    }
+  }
+}
+function beginGuide() {
+  capture.samples = [];
+  guide = {
+    step: 0,
+    start: performance.now(),
+    frames: [],
+    depth: 0,
+    correct: 0,
+    answered: 0,
+    total: 0,
+    left: [],
+    right: [],
+  };
+  tracker.reset(null);
+  showGuide();
+}
+function showGuide() {
+  let el = $("#guide");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "guide";
+    el.className = "calibration-dock";
+    document.body.append(el);
+  }
+  const step = guide?.step ?? 0;
+  const texts = [
+    [
+      "01 / 站位",
+      "正面站稳，肩髋完整入镜",
+      "保持自然站姿约 2 秒。左侧预览保持可见；全身模式需双肩、双髋同时清晰。",
+    ],
+    [
+      "02 / 舒适范围",
+      "左右伸展，再把双手抬高",
+      "在舒适范围慢慢伸展，约 6 秒。不需要用力过伸。",
+    ],
+    [
+      "03 / Z0",
+      "前后轻轻动一下",
+      "共 3 轮。每轮：准备 → 小步前后动一下 → 回位停稳。",
+    ],
+    [
+      "04 / Z1 实验",
+      "分别靠近、远离摄像头",
+      "跟随方向提示。每次小步移动后，在回位阶段回到起点。",
+    ],
+  ];
+  const t = texts[Math.min(step, 3)];
+  el.innerHTML = `<div class="modal calibration-modal"><div class="eyebrow">${t[0]}</div><h2>${t[1]}</h2><p>${t[2]}</p><div id="guide-joints" class="joint-diagnostics"></div><div class="guide-state" id="guide-state">准备中</div><div class="guide-meter"><i id="guide-progress"></i></div><p class="fineprint" id="guide-detail">保持 Mac 和镜头固定，避免转身与屈膝。</p><div class="modal-actions"><button class="text-btn" id="cancel-guide">取消校准</button>${step === 0 ? '<button class="secondary" id="upper-body" disabled>仅上半身校准，先玩 XY</button>' : step >= 2 ? '<button class="secondary" id="skip-guide">跳过剩余 Z 测试</button>' : ""}</div></div>`;
+  $("#cancel-guide").onclick = () => {
+    guide = null;
+    el.remove();
+    sessionVerified = false;
+    toast("校准已取消");
+  };
+  $("#skip-guide")?.addEventListener("click", finishGuide);
+  $("#upper-body")?.addEventListener("click", () => {
+    const c = capture.candidate("upper-body", performance.now());
+    if (!c || !guide) return toast("请让双肩在画面内清晰稳定约2秒");
+    calibration = c;
+    tracker.reset(c);
+    mode = "XY";
+    guide.step = 1;
+    guide.start = performance.now();
+    showGuide();
+  });
+}
+function finishGuide() {
+  if (calibration) {
+    calibration.z0 =
+      calibration.profile !== "upper-body" && (guide?.depth ?? 0) >= 3;
+    calibration.z1 =
+      calibration.profile !== "upper-body" && (guide?.correct ?? 0) >= 4;
+    save("pulse-calibration", calibration);
+    tracker.reset(calibration);
+    sessionVerified = true;
+    log({
+      type: "calibration",
+      data: { ...calibration },
+      z0Count: guide?.depth,
+      z1Correct: guide?.correct,
+      z1Answered: guide?.answered,
+      z1Total: guide?.total,
+    });
+    toast(
+      calibration.profile === "upper-body"
+        ? "上半身校准已保存，可以先玩 XY；Z 未启用"
+        : `站位已保存 · Z0 ${calibration.z0 ? "通过" : "待验证"} · Z1 ${calibration.z1 ? "通过" : "待验证"}`,
+    );
+  }
+  guide = null;
+  $("#guide")?.remove();
+  render();
+}
+function advanceGuide(now: number) {
+  if (!guide) return;
+  const g = guide,
+    elapsed = (now - g.start) / 1000;
+  if (g.step === 0) {
+    const points = frame?.points ?? [],
+      diagnosis = inspectPose(points);
+    const c = capture.candidate("full-body", now);
+    $("#guide-joints").innerHTML = jointPanel(points);
+    $("#guide-state").textContent = diagnosis.fullReady
+      ? "四点可见，保持站稳"
+      : diagnosis.shoulderReady
+        ? "双肩可见，髋部尚未通过"
+        : "等待双肩清晰入镜";
+    $("#guide-progress").style.width =
+      capture.progress("full-body", now) * 100 + "%";
+    $("#guide-detail").textContent = diagnosis.fullReady
+      ? "保持稳定约2秒；Z校准不需要膝盖或脚踝点。"
+      : diagnosis.reason +
+        "。可后退一点或调整镜头俯仰，让腰带以下/上大腿也入镜；或选择上半身模式先玩XY。";
+    const upperButton = $("#upper-body") as HTMLButtonElement | null;
+    if (upperButton)
+      upperButton.disabled = !capture.candidate("upper-body", now);
+    if (c) {
+      calibration = c;
+      tracker.reset(c);
+      g.step = 1;
+      g.start = now;
+      showGuide();
+    }
+  } else if (g.step === 1) {
+    $("#guide-state").textContent =
+      `舒适伸展 ${Math.max(0, 6 - Math.floor(elapsed))}`;
+    $("#guide-progress").style.width = Math.min(100, (elapsed / 6) * 100) + "%";
+    if (elapsed >= 6) {
+      if (calibration && g.left.length > 15) {
+        const xs = g.left,
+          ys = g.right;
+        const span = Math.max(...xs) - Math.min(...xs),
+          vspan = Math.max(...ys) - Math.min(...ys);
+        calibration.reachX = Math.max(calibration.shoulder * 1.9, span * 0.85);
+        calibration.reachY = Math.max(
+          calibration.profile === "upper-body"
+            ? calibration.shoulder * 2.5
+            : calibration.torso * 2.1,
+          vspan * 1.2,
+        );
+        tracker.reset(calibration);
+      }
+      if (calibration?.profile === "upper-body") {
+        finishGuide();
+        return;
+      }
+      g.step = 2;
+      g.start = now;
+      trial = null;
+      showGuide();
+    }
+  } else {
+    const rounds = g.step === 2 ? 3 : 4,
+      round = Math.floor(elapsed / 5);
+    if (round >= rounds) {
+      if (trial) completeTrial(true);
+      if (g.step === 2) {
+        g.step = 3;
+        g.start = now;
+        trial = null;
+        tracker.reset(calibration);
+        showGuide();
+      } else finishGuide();
+      return;
+    }
+    const phase = elapsed % 5;
+    const label =
+      g.step === 2
+        ? "either"
+        : round % 2 === 0
+          ? "toward_camera"
+          : "away_from_camera";
+    const expectedStart = g.start + round * 5000;
+    if (trial && trial.start !== expectedStart) completeTrial(true);
+    if (!trial) {
+      trial = { label, start: expectedStart, events: [], auto: true };
+    }
+    const instruction =
+      phase < 1
+        ? "准备"
+        : phase < 3
+          ? label === "either"
+            ? "身体前后动一下"
+            : label === "toward_camera"
+              ? "靠近摄像头"
+              : "远离摄像头"
+          : "轻松回位，停稳";
+    $("#guide-state").textContent = `${round + 1}/${rounds} · ${instruction}`;
+    $("#guide-progress").style.width = (elapsed / (rounds * 5)) * 100 + "%";
+    $("#guide-detail").textContent =
+      `Z0 合格事件 ${g.depth} / 3 · Z1 方向正确 ${g.correct} / 4（校准结果须独立验证）`;
+  }
+}
+function completeTrial(auto: boolean) {
+  if (!trial) return;
+  const t = trial;
+  const e = t.events[0];
+  const prediction = e?.direction ?? (e ? "uncertain" : "no_event");
+  if (auto && guide) {
+    if (guide.step === 2 && e) guide.depth++;
+    if (guide.step === 3) {
+      guide.total++;
+      if (e?.direction) guide.answered++;
+      if (prediction === t.label) guide.correct++;
+    }
+  }
+  const tester =
+    ($("#tester") as HTMLInputElement | null)?.value ?? "calibration";
+  trials.push({
+    label: t.label,
+    prediction,
+    confidence: e?.confidence ?? 0,
+    phase: "movement-window",
+    time: Date.now(),
+    tester,
+    verifiedByHuman: !auto,
+  });
+  log({
+    type: auto ? "calibration-trial" : "trial",
+    label: t.label,
+    prediction,
+    events: t.events.map((e) => ({
+      id: e.id,
+      direction: e.direction,
+      confidence: e.confidence,
+    })),
+    verifiedByHuman: !auto,
+  });
+  trial = null;
+  $("#trial-count")?.replaceChildren(
+    document.createTextNode(`已记录 ${trials.length} 条试验`),
+  );
+}
+function showTutorial(launch: boolean) {
+  const el = document.createElement("div");
+  el.className = "modal-backdrop";
+  el.id = "tutorial";
+  el.innerHTML = `<div class="modal tutorial"><div class="eyebrow">HOW TO PLAY / 动作图例</div><h2>音符到拍，就让身体发光。</h2><div class="tutorial-list"><p><b>◉ 接拍</b><span>用对应的手移动到圆环，停着不动不会自动得分。</span></p><p><b>◇ 挥切</b><span>按箭头方向划过菱形，光刃就是你的手。</span></p><p><b>◉ ◇ 双手</b><span>双手同时进入左右目标；侧摆符号 ↔ 用身体轻轻侧移。</span></p><p><b>◎ Z0 空间脉冲</b><span>前后小步动一下，任意方向都可以。</span></p><p><b>⇥ Z1 方向实验</b><span>看清“靠近 / 远离”，完成小步动作；空段回位不计分。</span></p></div><p class="fineprint">先让身体完整入框，保持镜头固定。举双手在头顶保持1.5秒或按Esc暂停。</p><button class="primary" id="tutorial-done">${launch ? "明白了，进入舞台 ▷" : "明白了"}</button></div>`;
+  document.body.append(el);
+  $("#tutorial-done").onclick = () => {
+    tutorialSeen = true;
+    save("pulse-tutorial", true);
+    el.remove();
+    if (launch) startGame();
+  };
+}
+async function startGame() {
+  if (input === "camera") {
+    if (!camera.active) {
+      await enableCamera();
+      return;
+    }
+    if (!sessionVerified) {
+      beginGuide();
+      view = "lab";
+      render();
+      return;
+    }
+    if (
+      (mode === "Z0" && !calibration?.z0) ||
+      (mode === "Z1" && !calibration?.z1)
+    )
+      return toast("此档 Z 校准尚未通过。请在实验室重试，或选择较低配置。");
+  }
+  if (!tutorialSeen) {
+    showTutorial(true);
+    return;
+  }
+  try {
+    const r = await fetch(
+      `/charts/${duration}-${mode}${reverse && mode === "Z1" ? "-reverse" : ""}.json`,
+    );
+    if (!r.ok) throw Error("谱面读取失败");
+    const chart: Chart = await r.json();
+    const errors = validateChart(chart);
+    if (errors.length) throw Error(errors.join(" / "));
+    await music.init();
+    game = new Game(chart);
+    stage.game = game;
+    stage.frame = input === "camera" ? frame : null;
+    stats = { processing: [], fps: [], judgements: [], interruptions: [] };
+    lastZ = -Infinity;
+    tracker.reset(calibration);
+    game.onJudge = (j) => {
+      stage.flash(j);
+      music.hit(j.grade);
+      stats.judgements.push({
+        id: j.note.id,
+        time: j.note.time,
+        grade: j.grade,
+        error: j.error,
+        action: j.action,
+      });
+    };
+    view = "play";
+    playing = true;
+    paused = false;
+    counting = true;
+    finishAt = 0;
+    lastPose = performance.now();
+    badSince = 0;
+    lowSince = 0;
+    render();
+    music.play(0, 3);
+    log({
+      type: "game-start",
+      chart: chart.id,
+      input,
+      mode,
+      rule: RULE_VERSION,
+      time: Date.now(),
+    });
+  } catch (e) {
+    toast(`无法开始：${String(e)}`);
+  }
+}
+function pause(reason: string) {
+  if (!playing || paused) return;
+  music.pause();
+  playing = false;
+  paused = true;
+  counting = false;
+  if (game) game.assisted = true;
+  stats.interruptions.push(reason);
+  pauseReason = reason;
+  const el = $("#pause-overlay");
+  if (!el) return;
+  el.hidden = false;
+  el.className = "modal-backdrop";
+  el.innerHTML = `<div class="modal"><div class="eyebrow">STAGE PAUSED</div><h2>舞台等你回来。</h2><p>${escape(pauseReason)}</p><p class="fineprint">本局标记为辅助成绩。继续将保留已完成判定，过期动作会被丢弃。</p><div class="modal-actions"><button class="text-btn" data-go="home">返回</button><button class="secondary" id="restart">重新开始</button><button class="primary" id="resume">继续 ▷</button></div></div>`;
+  el.querySelector("[data-go]")!.addEventListener("click", () => go("home"));
+  $("#restart").onclick = startGame;
+  $("#resume").onclick = async () => {
+    if (
+      input === "camera" &&
+      (!(mode === "XY" ? frame?.quality : frame?.depthQuality) ||
+        camera.health.pause)
+    )
+      return toast(
+        mode === "XY" ? "请先让双肩清晰可见" : "请先让双肩双髋清晰可见",
+      );
+    try {
+      await music.init();
+      const time = music.offset;
+      tracker.reset(calibration);
+      music.play(time, 2);
+      playing = true;
+      paused = false;
+      counting = true;
+      badSince = 0;
+      lowSince = 0;
+      el.hidden = true;
+    } catch (e) {
+      toast(String(e));
+    }
+  };
+}
+function finish() {
+  if (!game) return;
+  music.pause();
+  playing = false;
+  counting = false;
+  paused = false;
+  const bests = safe<Record<string, number>>("pulse-bests", {});
+  if (!game.assisted) {
+    bests[bestKey()] = Math.max(bests[bestKey()] ?? 0, game.score);
+    save("pulse-bests", bests);
+  }
+  log({
+    type: "game-end",
+    score: game.score,
+    counts: game.counts,
+    assisted: game.assisted,
+  });
+  view = "results";
+  render();
+}
+function bestKey() {
+  return `${game?.chart.id}/${RULE_VERSION}/${input}${input === "camera" ? "/" + (calibration?.profile ?? "full-body") : ""}`;
+}
+function dispatch(a: Action) {
+  if (!playing || !game || music.time < 0) return;
+  const time = music.eventTime(a.time) - offset / 1000;
+  if (a.kind === "depth") {
+    if (time < lastZ + 1.5) return;
+    lastZ = time;
+    if (
+      mode === "Z1" &&
+      (!a.direction || (a.directionConfidence ?? 0) < 0.75)
+    ) {
+      game.protect(time - 0.38, time + 0.38);
+      return;
+    }
+  }
+  game.consume({ ...a, time });
+}
+camera.onError = (s) => {
+  if (playing) pause("摄像头或模型异常：" + s);
+  toast(s);
+  log({ type: "input-error", error: s });
+};
+camera.onPose = (points, time, processing) => {
+  lastPose = performance.now();
+  if (guide?.step === 0) capture.add(points, time);
+  if (guide?.step === 1 && points.length > 16) {
+    for (const i of [15, 16])
+      if ((points[i].visibility ?? 0) > 0.65) {
+        guide.left.push(points[i].x);
+        guide.right.push(points[i].y);
+      }
+  }
+  frame = tracker.process(points, time, processing);
+  if (input === "camera") stage.frame = frame;
+  if (playing && mode === "Z1" && input === "camera" && frame.reason && game) {
+    const at = music.eventTime(time) - offset / 1000;
+    const n = game.chart.notes.find(
+      (n) =>
+        n.kind === "step" &&
+        !game!.results.has(n.id) &&
+        Math.abs(n.time - at) <= 0.38,
+    );
+    if (n) game.protect(n.time - 0.001, n.time + 0.001);
+  }
+  if (mode === "XY" ? frame.quality : frame.depthQuality) {
+    badSince = 0;
+  } else if (!badSince) badSince = performance.now();
+  if (
+    playing &&
+    input === "camera" &&
+    badSince &&
+    performance.now() - badSince > 300
+  ) {
+    game?.protect(music.time - 0.3, music.time + 0.15);
+    pause(
+      mode === "XY"
+        ? "双肩识别暂时丢失，请回到取景范围"
+        : "Z需要双肩和双髋，请查看实验室具体缺失点",
+    );
+  }
+  for (const a of frame.actions) {
+    if (a.kind === "depth") {
+      log({ type: "depth", ...a, state: frame.status, scale: frame.scale });
+      if (trial) {
+        const phase = (a.time - trial.start) / 1000;
+        if (phase >= 1 && phase < 3) trial.events.push(a);
+      }
+    }
+    dispatch(a);
+  }
+  if (playing) {
+    stats.processing.push(processing);
+    stats.fps.push(camera.fps);
+  }
+};
+function keyAction(key: string) {
+  if (!playing || !game || music.time < 0) return;
+  const now = performance.now(),
+    time = music.time - offset / 1000;
+  if (key === "w" || key === "s") {
+    dispatch({
+      id: `key-${currentKey++}`,
+      time: now,
+      kind: "depth",
+      direction: key === "w" ? "toward_camera" : "away_from_camera",
+      directionConfidence: 1,
+      confidence: 1,
+    });
+    return;
+  }
+  if (key === "a" || key === "d") {
+    dispatch({
+      id: `key-${currentKey++}`,
+      time: now,
+      kind: "sway",
+      confidence: 1,
+    });
+    return;
+  }
+  const hand = key === "j" || key === "arrowup" ? "left" : "right";
+  const targets = game.chart.notes
+    .filter(
+      (n) =>
+        !game!.results.has(n.id) &&
+        (!n.hand || n.hand === hand) &&
+        ["catch", "slash", "double"].includes(n.kind),
+    )
+    .sort((a, b) => Math.abs(a.time - time) - Math.abs(b.time - time));
+  const n = targets[0];
+  if (!n || Math.abs(n.time - time) > 0.5) return;
+  const x = n.kind === "double" ? (hand === "left" ? 0.32 : 0.68) : n.x,
+    y = n.y;
+  const slash = key.startsWith("arrow");
+  const dy = key === "arrowup" ? -1 : 1;
+  stage.simulationHands[hand] = { x, y };
+  dispatch({
+    id: `key-${currentKey++}`,
+    time: now,
+    kind: "hand",
+    hand,
+    x,
+    y,
+    prevX: x,
+    prevY: slash ? y - dy * 0.15 : y - 0.09,
+    dx: 0,
+    dy: slash ? dy : 0,
+    speed: slash ? 2 : 0.5,
+    confidence: 1,
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if ((e.target as HTMLElement).matches("input,select,textarea")) return;
+  if (e.key === "Escape") {
+    if (playing) pause("已暂停");
+    return;
+  }
+  if (e.code === "Space" && sync) {
+    e.preventDefault();
+    recordTap();
+    return;
+  }
+  if (
+    input === "keyboard" &&
+    !e.repeat &&
+    ["j", "k", "w", "s", "a", "d", "ArrowUp", "ArrowDown"].includes(e.key)
+  ) {
+    e.preventDefault();
+    keyAction(e.key.toLowerCase());
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && playing) pause("页面进入后台，音乐和评分已暂停");
+});
+window.addEventListener("blur", () => {
+  if (playing) pause("窗口失去焦点，音乐和评分已暂停");
+});
+function startSync() {
+  if (sync) return;
+  music.init().then(() => {
+    const start = performance.now() + 1000;
+    sync = { start, taps: [], beats: 0, nextBeat: start, timer: 0 };
+    const el = document.createElement("div");
+    el.id = "sync-modal";
+    el.className = "modal-backdrop";
+    el.innerHTML =
+      '<div class="modal"><div class="eyebrow">RHYTHM CALIBRATION</div><h2>跟着声音轻点。</h2><p>听到每个短音后，按空格或点击拍点。记录 8 次，估计综合偏差。</p><button id="tap" class="tap-button">●</button><p id="tap-count">准备…</p><button id="sync-cancel" class="text-btn">取消</button></div>';
+    document.body.append(el);
+    $("#tap").onclick = recordTap;
+    $("#sync-cancel").onclick = stopSync;
+    sync!.timer = window.setInterval(() => {
+      if (!sync) return;
+      const now = performance.now();
+      if (now >= sync.nextBeat) {
+        music.hit("Perfect");
+        sync.beats++;
+        sync.nextBeat += 500;
+        $("#tap").classList.toggle("beat");
+        if (sync.beats > 24) stopSync();
+      }
+    }, 12);
+  });
+}
+function recordTap() {
+  if (!sync || performance.now() < sync.start) return;
+  const delta = performance.now() - sync.start;
+  const residual = delta - Math.round(delta / 500) * 500;
+  sync.taps.push(residual);
+  $("#tap-count").textContent = `${sync.taps.length}/8`;
+  if (sync.taps.length >= 8) {
+    const values = sync.taps.slice(1).sort((a, b) => a - b);
+    offset = Math.round(values[Math.floor(values.length / 2)]);
+    save("pulse-offset", offset);
+    log({ type: "sync", offset, taps: sync.taps });
+    stopSync();
+    render();
+    toast(`综合偏移已保存 ${offset}ms；此为人工敲拍估计，非端到端延迟实测。`);
+  }
+}
+function stopSync() {
+  if (sync) clearInterval(sync.timer);
+  sync = null;
+  $("#sync-modal")?.remove();
+}
+function exportReport() {
+  const rows = trials;
+  const directionRows = rows.filter(
+    (r) =>
+      r.verifiedByHuman &&
+      (r.label === "toward_camera" || r.label === "away_from_camera"),
+  );
+  const answered = directionRows.filter(
+    (r) =>
+      r.prediction === "toward_camera" || r.prediction === "away_from_camera",
+  );
+  const correct = directionRows.filter((r) => r.label === r.prediction).length;
+  const pct = (n: number, d: number) => (d ? n / d : null);
+  const percentile = (a: number[], p: number) =>
+    a.length
+      ? [...a].sort((x, y) => x - y)[
+          Math.min(a.length - 1, Math.floor(a.length * p))
+        ]
+      : null;
+  const report = {
+    app: "Pulse Stage",
+    version: "0.1.2",
+    createdAt: new Date().toISOString(),
+    userAgent: navigator.userAgent,
+    rule: RULE_VERSION,
+    input,
+    mode,
+    calibration,
+    poseDiagnostics: frame
+      ? {
+          modelOutputCount: frame.points.length,
+          joints: inspectPose(frame.points).joints,
+          reason: inspectPose(frame.points).reason,
+        }
+      : null,
+    offsetMs: offset,
+    privacy: "no raw video or continuous landmarks included",
+    model: POSE_MODEL,
+    inputHealth: camera.health,
+    verification:
+      "Prototype only. Human confirmation and independent validation required. Keyboard runs are not camera evidence.",
+    chart: game?.chart,
+    game: game
+      ? { score: game.score, counts: game.counts, assisted: game.assisted }
+      : null,
+    metrics: {
+      directionTrials: directionRows.length,
+      wholeSampleSuccess: pct(correct, directionRows.length),
+      coverage: pct(answered.length, directionRows.length),
+      answeredAccuracy: pct(correct, answered.length),
+      softwareInferenceP95Ms: percentile(stats.processing, 0.95),
+      poseFpsMedian: percentile(stats.fps, 0.5),
+      endToEndLatencyMs: null,
+    },
+    trials,
+    logs,
+    stats,
+  };
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `pulse-stage-report-${Date.now()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast("已导出本机报告，不含原始视频或连续骨架轨迹");
+}
+const history: number[] = [];
+let lastPaint = 0;
+function jointPanel(points: Point[]) {
+  const d = inspectPose(points),
+    label = {
+      ready: "可用",
+      uncertain: "不可靠",
+      outside: "画面外",
+      missing: "无数据",
+    };
+  return `<div class="joint-summary">模型输出 ${points.length}/33 点 · 青色可靠 / 琥珀色为待确认估计 · 校准阈值 ${Math.round(CALIBRATION_CONFIDENCE * 100)}%</div><div class="joint-grid">${d.joints.map((j) => `<div class="joint-item ${j.status}"><b>${j.label}</b><span>${label[j.status]} · ${Math.round(Math.min(j.visibility, j.presence ?? 1) * 100)}%</span></div>`).join("")}</div>`;
+}
+function labPaint() {
+  if (view !== "lab") return;
+  const c = $<HTMLCanvasElement>("#skeleton");
+  if (c) {
+    const r = c.getBoundingClientRect();
+    c.width = r.width * devicePixelRatio;
+    c.height = r.height * devicePixelRatio;
+    const ctx = c.getContext("2d")!;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+    const scale = Math.min(
+      r.width / (camera.video.videoWidth || 640),
+      r.height / (camera.video.videoHeight || 480),
+    );
+    const vw = (camera.video.videoWidth || 640) * scale,
+      vh = (camera.video.videoHeight || 480) * scale;
+    ctx.translate((r.width - vw) / 2, (r.height - vh) / 2);
+    if (frame?.points.length) {
+      const p = frame.points;
+      ctx.strokeStyle = "#69e9ff";
+      ctx.lineWidth = 2;
+      for (const [a, b] of [
+        [11, 12],
+        [11, 13],
+        [13, 15],
+        [12, 14],
+        [14, 16],
+        [11, 23],
+        [12, 24],
+        [23, 24],
+        [23, 25],
+        [25, 27],
+        [24, 26],
+        [26, 28],
+      ]) {
+        if (
+          !p[a] ||
+          !p[b] ||
+          [p[a], p[b]].some(
+            (point) => !Number.isFinite(point.x) || !Number.isFinite(point.y),
+          )
+        )
+          continue;
+        const certain =
+          jointStatus(p[a]) === "ready" && jointStatus(p[b]) === "ready";
+        ctx.strokeStyle = certain ? "#69e9ff" : "#e5b67a88";
+        ctx.setLineDash(certain ? [] : [4, 4]);
+        ctx.beginPath();
+        ctx.moveTo((1 - p[a].x) * vw, p[a].y * vh);
+        ctx.lineTo((1 - p[b].x) * vw, p[b].y * vh);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      for (let i = 0; i < p.length; i++) {
+        if (
+          !Number.isFinite(p[i].x) ||
+          !Number.isFinite(p[i].y) ||
+          p[i].x < 0 ||
+          p[i].x > 1 ||
+          p[i].y < 0 ||
+          p[i].y > 1
+        )
+          continue;
+        const status = jointStatus(p[i]);
+        ctx.fillStyle =
+          status === "ready" ? (i === 16 ? "#ff88c8" : "#69e9ff") : "#e5b67a88";
+        ctx.beginPath();
+        ctx.arc(
+          (1 - p[i].x) * vw,
+          p[i].y * vh,
+          [11, 12, 23, 24].includes(i) ? 5 : 2.5,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      ctx.font = "12px system-ui";
+      ctx.fillStyle = "#fff";
+      for (const j of inspectPose(p).joints) {
+        const point = p[j.id];
+        if (point && Number.isFinite(point.x) && Number.isFinite(point.y))
+          ctx.fillText(
+            j.label,
+            (1 - Math.max(0.03, Math.min(0.97, point.x))) * vw + 7,
+            Math.max(0.04, Math.min(0.96, point.y)) * vh - 7,
+          );
+      }
+    }
+  }
+  $("#joint-diagnostics").innerHTML = jointPanel(frame?.points ?? []);
+  if (!frame) return;
+  $("#lab-quality").textContent =
+    `${frame.points.length} 个模型输出点 · ${inspectPose(frame.points).reason}`;
+  $("#direction-label").textContent =
+    frame.direction === "toward_camera"
+      ? "靠近 ↘"
+      : frame.direction === "away_from_camera"
+        ? "远离 ↗"
+        : frame.direction === "uncertain"
+          ? "不确定"
+          : "稳定 / 等待动作";
+  $("#signal-reason").textContent = frame.reason || frame.status;
+  $("#scale-value").textContent = frame.scale.toFixed(3) + "×";
+  $("#confidence-value").textContent = Math.round(frame.confidence * 100) + "%";
+  $("#inference-value").textContent = frame.processing.toFixed(0) + " ms";
+  history.push(frame.scale);
+  if (history.length > 120) history.shift();
+  const graph = $<HTMLCanvasElement>("#signal-graph");
+  if (graph) {
+    const r = graph.getBoundingClientRect();
+    graph.width = r.width * devicePixelRatio;
+    graph.height = r.height * devicePixelRatio;
+    const ctx = graph.getContext("2d")!;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+    ctx.strokeStyle = "#ffffff18";
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, (r.height * i) / 4);
+      ctx.lineTo(r.width, (r.height * i) / 4);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#63e6ff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    history.forEach((v, i) => {
+      const x = (i / 119) * r.width,
+        y = r.height * 0.5 - (v - 1) * r.height * 2;
+      if (i) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  }
+}
+function dwell(now: number) {
+  if (
+    !camera.active ||
+    !frame?.quality ||
+    performance.now() - lastPose > 1500 ||
+    playing ||
+    guide
+  )
+    return;
+  const p = frame.hands.right ?? frame.hands.left;
+  if (!p) return;
+  const cursor = $("#hand-cursor");
+  cursor.classList.add("visible");
+  const x = p.x * innerWidth,
+    y = p.y * innerHeight;
+  cursor.style.left = x + "px";
+  cursor.style.top = y + "px";
+  const target =
+    document
+      .elementFromPoint(x, y)
+      ?.closest<HTMLElement>("button:not(:disabled)") ?? null;
+  if (target !== navDwell.el) {
+    navDwell = { el: target, since: now };
+    cursor.style.setProperty("--progress", "0deg");
+  } else if (target) {
+    const progress = (now - navDwell.since) / 1000;
+    cursor.style.setProperty(
+      "--progress",
+      Math.min(360, progress * 360) + "deg",
+    );
+    if (progress >= 1) {
+      navDwell = { el: null, since: now };
+      target.click();
+    }
+  }
+}
+function animate(now: number) {
+  requestAnimationFrame(animate);
+  stage.time = music.time;
+  stage.draw(now);
+  if (guide) advanceGuide(now);
+  if (trial && !trial.auto) {
+    const elapsed = (now - trial.start) / 1000;
+    const state =
+      elapsed < 1 ? "准备" : elapsed < 3 ? "请完成所选动作" : "回位并停稳";
+    $("#trial-status")?.replaceChildren(
+      document.createTextNode(
+        `${state} · ${Math.max(0, 5 - elapsed).toFixed(1)} 秒`,
+      ),
+    );
+    if (elapsed >= 5) {
+      const valid = confirm("本次是否按提示完成动作？确认保存，取消丢弃。");
+      if (valid) completeTrial(false);
+      else trial = null;
+      $("#trial-status")?.replaceChildren(
+        document.createTextNode(
+          "试验结束，可在导出报告中检查预测与真实动作标签。",
+        ),
+      );
+    }
+  }
+  if (view === "play" && playing && game) {
+    const time = music.time;
+    const msg = $("#center-message");
+    if (counting) {
+      if (time < 0)
+        msg.innerHTML = `<strong>${Math.ceil(-time)}</strong><span>跟随节拍，准备发光</span>`;
+      else {
+        counting = false;
+        msg.innerHTML = "";
+      }
+    }
+    game.tick(time);
+    $("#score").textContent = String(game.score).padStart(7, "0");
+    $("#combo").textContent = String(game.combo);
+    $("#time").textContent =
+      `${Math.floor(Math.max(0, time) / 60)}:${String(Math.floor(Math.max(0, time)) % 60).padStart(2, "0")}`;
+    $("#progress").style.width = Math.max(0, (time / duration) * 100) + "%";
+    const next = game.chart.notes.find(
+      (n) =>
+        ["pulse", "step", "double"].includes(n.kind) &&
+        !game!.results.has(n.id) &&
+        n.time > time &&
+        n.time - time < 2 &&
+        n.id.startsWith("z"),
+    );
+    $("#z-cue").innerHTML = next
+      ? `<small>空间节点 / ${Math.ceil((next.time - time) * 2)} 拍</small><strong>${next.kind === "double" ? "双手接拍" : next.kind === "pulse" ? "前后动一下" : next.direction === "toward_camera" ? "靠近摄像头" : "远离摄像头"}</strong>`
+      : "";
+    if (input === "camera") {
+      $("#tracking-status").textContent =
+        frame?.reason ||
+        `${frame?.status ?? "等待输入"} · ${camera.fps.toFixed(0)} FPS`;
+      const health = camera.health;
+      if (health.pause) pause(health.message);
+      if (!counting && health.slow) {
+        if (!lowSince) lowSince = now;
+        if (now - lowSince > 2000) {
+          if (!game.assisted) {
+            toast("识别偏慢，已降低特效；本局继续练习并标记为辅助成绩");
+            stats.interruptions.push("slow-inference-practice");
+          }
+          game.assisted = true;
+          stage.low = true;
+          $("#tracking-status").textContent = health.message;
+        }
+      } else lowSince = 0;
+      const p = frame?.points;
+      if (
+        p &&
+        p.length > 16 &&
+        p[15].y < p[0].y &&
+        p[16].y < p[0].y &&
+        Math.abs(p[15].x - p[16].x) < 0.22
+      ) {
+        if (!aboveSince) aboveSince = now;
+        if (now - aboveSince > 1500) {
+          pause("举手暂停");
+          aboveSince = 0;
+        }
+      } else aboveSince = 0;
+    }
+    if (time >= duration + 0.75) {
+      if (!finishAt) finishAt = now;
+      finish();
+    }
+  }
+  if (now - lastPaint > 100) {
+    lastPaint = now;
+    labPaint();
+    updateDevice();
+    $("#fps").textContent =
+      `${stage.fps.toFixed(0)} RENDER FPS${camera.active ? " / " + camera.fps.toFixed(0) + " POSE FPS" : ""}`;
+  }
+  if (!playing) dwell(now);
+  else $("#hand-cursor").classList.remove("visible");
+}
+render();
+requestAnimationFrame(animate);
+window.addEventListener("pagehide", () => {
+  camera.stop();
+  music.pause();
+});

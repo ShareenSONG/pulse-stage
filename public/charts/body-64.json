@@ -1,0 +1,554 @@
+{
+  "id": "neon-bloom-body",
+  "version": "1.4.0",
+  "audioVersion": "neon-bloom-64-v1",
+  "playStyle": "body-pilot",
+  "ruleVersion": "body-1.4.0",
+  "mapVersion": "shoulders-1.4.0",
+  "duration": 64,
+  "bpm": 120,
+  "offset": 0,
+  "leadTime": 2.8,
+  "events": [
+    {
+      "id": "bp-1",
+      "beat": 4,
+      "time": 2,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-0"
+    },
+    {
+      "id": "bp-2",
+      "beat": 8,
+      "time": 4,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-1"
+    },
+    {
+      "id": "bp-3",
+      "beat": 12,
+      "time": 6,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-2"
+    },
+    {
+      "id": "bp-4",
+      "beat": 13,
+      "time": 6.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-2"
+    },
+    {
+      "id": "bp-5",
+      "beat": 16,
+      "time": 8,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-3"
+    },
+    {
+      "id": "bp-6",
+      "beat": 17,
+      "time": 8.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-3"
+    },
+    {
+      "id": "bp-7",
+      "beat": 20,
+      "time": 10,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-4"
+    },
+    {
+      "id": "bp-8",
+      "beat": 21,
+      "time": 10.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-4"
+    },
+    {
+      "id": "bp-9",
+      "beat": 24,
+      "time": 12,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-5"
+    },
+    {
+      "id": "bp-10",
+      "beat": 25,
+      "time": 12.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-5"
+    },
+    {
+      "id": "bp-11",
+      "beat": 28,
+      "time": 14,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-6"
+    },
+    {
+      "id": "bp-12",
+      "beat": 29,
+      "time": 14.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-6"
+    },
+    {
+      "id": "bp-13",
+      "beat": 32,
+      "time": 16,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-7"
+    },
+    {
+      "id": "bp-14",
+      "beat": 33,
+      "time": 16.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-7"
+    },
+    {
+      "id": "bp-15",
+      "beat": 36,
+      "time": 18,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-8"
+    },
+    {
+      "id": "bp-16",
+      "beat": 37,
+      "time": 18.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-8"
+    },
+    {
+      "id": "bp-17",
+      "beat": 40,
+      "time": 20,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-9"
+    },
+    {
+      "id": "bp-18",
+      "beat": 41,
+      "time": 20.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-9"
+    },
+    {
+      "id": "bp-19",
+      "beat": 44,
+      "time": 22,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-10"
+    },
+    {
+      "id": "bp-20",
+      "beat": 45,
+      "time": 22.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-10"
+    },
+    {
+      "id": "bp-21",
+      "beat": 48,
+      "time": 24,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-11"
+    },
+    {
+      "id": "bp-22",
+      "beat": 49,
+      "time": 24.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-11"
+    },
+    {
+      "id": "bp-23",
+      "beat": 52,
+      "time": 26,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-12"
+    },
+    {
+      "id": "bp-24",
+      "beat": 53,
+      "time": 26.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-12"
+    },
+    {
+      "id": "bp-25",
+      "beat": 56,
+      "time": 28,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-13"
+    },
+    {
+      "id": "bp-26",
+      "beat": 57,
+      "time": 28.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-13"
+    },
+    {
+      "id": "bp-27",
+      "beat": 60,
+      "time": 30,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-14"
+    },
+    {
+      "id": "bp-28",
+      "beat": 61,
+      "time": 30.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-14"
+    },
+    {
+      "id": "bp-29",
+      "beat": 64,
+      "time": 32,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-15"
+    },
+    {
+      "id": "bp-30",
+      "beat": 65,
+      "time": 32.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-15"
+    },
+    {
+      "id": "bp-31",
+      "beat": 68,
+      "time": 34,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-16"
+    },
+    {
+      "id": "bp-32",
+      "beat": 69,
+      "time": 34.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-16"
+    },
+    {
+      "id": "bp-33",
+      "beat": 72,
+      "time": 36,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-17"
+    },
+    {
+      "id": "bp-34",
+      "beat": 73,
+      "time": 36.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-17"
+    },
+    {
+      "id": "bp-35",
+      "beat": 76,
+      "time": 38,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-18"
+    },
+    {
+      "id": "bp-36",
+      "beat": 77,
+      "time": 38.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-18"
+    },
+    {
+      "id": "bp-37",
+      "beat": 80,
+      "time": 40,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-19"
+    },
+    {
+      "id": "bp-38",
+      "beat": 81,
+      "time": 40.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-19"
+    },
+    {
+      "id": "bp-39",
+      "beat": 84,
+      "time": 42,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-20"
+    },
+    {
+      "id": "bp-40",
+      "beat": 85,
+      "time": 42.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-20"
+    },
+    {
+      "id": "bp-41",
+      "beat": 88,
+      "time": 44,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-21"
+    },
+    {
+      "id": "bp-42",
+      "beat": 89,
+      "time": 44.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-21"
+    },
+    {
+      "id": "bp-43",
+      "beat": 92,
+      "time": 46,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-22"
+    },
+    {
+      "id": "bp-44",
+      "beat": 93,
+      "time": 46.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-22"
+    },
+    {
+      "id": "bp-45",
+      "beat": 96,
+      "time": 48,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-23"
+    },
+    {
+      "id": "bp-46",
+      "beat": 97,
+      "time": 48.5,
+      "x": 0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-23"
+    },
+    {
+      "id": "bp-47",
+      "beat": 100,
+      "time": 50,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-24"
+    },
+    {
+      "id": "bp-48",
+      "beat": 101,
+      "time": 50.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-24"
+    },
+    {
+      "id": "bp-49",
+      "beat": 104,
+      "time": 52,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-25"
+    },
+    {
+      "id": "bp-50",
+      "beat": 105,
+      "time": 52.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-25"
+    },
+    {
+      "id": "bp-51",
+      "beat": 108,
+      "time": 54,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-26"
+    },
+    {
+      "id": "bp-52",
+      "beat": 109,
+      "time": 54.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-26"
+    },
+    {
+      "id": "bp-53",
+      "beat": 112,
+      "time": 56,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-27"
+    },
+    {
+      "id": "bp-54",
+      "beat": 113,
+      "time": 56.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-27"
+    },
+    {
+      "id": "bp-55",
+      "beat": 116,
+      "time": 58,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-28"
+    },
+    {
+      "id": "bp-56",
+      "beat": 117,
+      "time": 58.5,
+      "x": -0.65,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-28"
+    },
+    {
+      "id": "bp-57",
+      "beat": 120,
+      "time": 60,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": true,
+      "group": "g-29"
+    },
+    {
+      "id": "bp-58",
+      "beat": 121,
+      "time": 60.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-29"
+    },
+    {
+      "id": "bp-59",
+      "beat": 124,
+      "time": 62,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-30"
+    },
+    {
+      "id": "bp-60",
+      "beat": 125,
+      "time": 62.5,
+      "x": 0,
+      "halfWidth": 0.12,
+      "accent": false,
+      "group": "g-30"
+    }
+  ]
+}
